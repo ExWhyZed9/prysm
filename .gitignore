@@ -1,0 +1,86 @@
+# =========================
+# Dependencies
+# =========================
+node_modules/
+
+# =========================
+# Expo
+# =========================
+.expo/
+.expo-shared/
+web-build/
+dist/
+
+# =========================
+# Native build folders
+# (Ignore if using managed workflow or prebuild locally)
+# =========================
+android/
+ios/
+
+# =========================
+# EAS / Signing Credentials
+# =========================
+credentials/
+credentials.json
+*.jks
+*.keystore
+*.p8
+*.p12
+*.mobileprovision
+
+# =========================
+# Environment variables (SECRETS)
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# Logs
+# =========================
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =========================
+# Metro / React Native cache
+# =========================
+.metro-cache/
+
+# =========================
+# TypeScript
+# =========================
+*.tsbuildinfo
+
+# =========================
+# Testing
+# =========================
+coverage/
+
+# =========================
+# Web / Next (if used)
+# =========================
+.next/
+out/
+
+# =========================
+# Editor / IDE
+# =========================
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Misc
+# =========================
+*.log
+

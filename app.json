@@ -1,0 +1,75 @@
+{
+  "expo": {
+    "name": "Prysm",
+    "slug": "prysm",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/images/icon.png",
+    "scheme": "prysmplayer",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "jsEngine": "hermes",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.prysmplayer.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0A1628",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "package": "com.prysmplayer.app",
+      "jsEngine": "hermes"
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/images/icon.png"
+    },
+    "plugins": [
+      [
+        "./plugins/withAndroidTVBanner",
+        {
+          "banner": "./assets/images/android-tv-banner.png"
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 250,
+          "resizeMode": "contain",
+          "backgroundColor": "#0A1628",
+          "dark": {
+            "backgroundColor": "#0A1628"
+          }
+        }
+      ],
+      "expo-web-browser",
+      [
+        "expo-screen-orientation",
+        {
+          "initialOrientation": "DEFAULT"
+        }
+      ],
+      [
+        "expo-video",
+        {
+          "supportsBackgroundPlayback": true,
+          "supportsPictureInPicture": true
+        }
+      ]
+    ],
+    "experiments": {
+      "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "0f6c48a8-8b6b-4cbd-8839-cb7ac433c62f"
+      }
+    },
+    "owner": "pavan82k"
+  }
+}
