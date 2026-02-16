@@ -9,6 +9,7 @@ import FavoritesScreen from "@/screens/FavoritesScreen";
 import SettingsScreen from "@/screens/SettingsScreen";
 import { ThemedText } from "@/components/ThemedText";
 import { useResponsive } from "@/hooks/useResponsive";
+import { useTheme } from "@/hooks/useTheme";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 
 const isTV = Platform.isTV;
@@ -50,6 +51,7 @@ interface BottomTabItemProps {
 
 function SidebarItem({ icon, iconActive, label, isActive, onPress, compact, hasTVPreferredFocus, itemRef, nextFocusDown, nextFocusUp }: SidebarItemProps) {
   const [isFocused, setIsFocused] = useState(false);
+  const { theme } = useTheme();
 
   const tvProps: any = {};
   if (isTV) {
@@ -70,21 +72,21 @@ function SidebarItem({ icon, iconActive, label, isActive, onPress, compact, hasT
       {...tvProps}
       style={[
         styles.sidebarItem,
-        isActive && styles.sidebarItemActive,
-        isFocused && styles.sidebarItemFocused,
+        isActive && { backgroundColor: theme.primary + "20" },
+        isFocused && { borderWidth: 2, borderColor: theme.primary, backgroundColor: theme.primary + "40", transform: [{ scale: 1.08 }] },
       ] as ViewStyle[]}
     >
       <Ionicons
         name={isActive ? iconActive : icon}
         size={compact ? 22 : 24}
-        color={isFocused ? "#FFFFFF" : isActive ? Colors.dark.primary : Colors.dark.textSecondary}
+        color={isFocused ? theme.text : isActive ? theme.primary : theme.textSecondary}
       />
       {!compact ? (
         <ThemedText
           type="small"
           style={[
             styles.sidebarLabel,
-            { color: isFocused ? "#FFFFFF" : isActive ? Colors.dark.primary : Colors.dark.textSecondary },
+            { color: isFocused ? theme.text : isActive ? theme.primary : theme.textSecondary },
           ]}
         >
           {label}
@@ -96,6 +98,7 @@ function SidebarItem({ icon, iconActive, label, isActive, onPress, compact, hasT
 
 function BottomTabItem({ icon, iconActive, label, isActive, onPress, hasTVPreferredFocus, itemRef, nextFocusLeft, nextFocusRight }: BottomTabItemProps) {
   const [isFocused, setIsFocused] = useState(false);
+  const { theme } = useTheme();
 
   const tvProps: any = {};
   if (isTV) {
@@ -116,19 +119,19 @@ function BottomTabItem({ icon, iconActive, label, isActive, onPress, hasTVPrefer
       {...tvProps}
       style={[
         styles.bottomTabItem,
-        isFocused && styles.bottomTabItemFocused,
+        isFocused && { borderWidth: 2, borderColor: theme.primary, borderRadius: BorderRadius.sm, backgroundColor: theme.primary + "40", transform: [{ scale: 1.08 }] },
       ] as ViewStyle[]}
     >
       <Ionicons
         name={isActive ? iconActive : icon}
         size={24}
-        color={isFocused ? "#FFFFFF" : isActive ? Colors.dark.primary : Colors.dark.textSecondary}
+        color={isFocused ? theme.text : isActive ? theme.primary : theme.textSecondary}
       />
       <ThemedText
         type="caption"
         style={[
           styles.bottomTabLabel,
-          { color: isFocused ? "#FFFFFF" : isActive ? Colors.dark.primary : Colors.dark.textSecondary },
+          { color: isFocused ? theme.text : isActive ? theme.primary : theme.textSecondary },
         ]}
       >
         {label}
@@ -140,6 +143,7 @@ function BottomTabItem({ icon, iconActive, label, isActive, onPress, hasTVPrefer
 export default function MainTabNavigator() {
   const insets = useSafeAreaInsets();
   const { sidebarWidth, isExtraWide } = useResponsive();
+  const { theme } = useTheme();
   const [currentScreen, setCurrentScreen] = useState<ScreenName>("Channels");
 
   const channelsRef = useRef<View>(null);
@@ -171,7 +175,7 @@ export default function MainTabNavigator() {
 
   if (useSidebar) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
         <View
           style={[
             styles.sidebar,
@@ -180,13 +184,14 @@ export default function MainTabNavigator() {
               paddingTop: insets.top + Spacing.md,
               paddingBottom: insets.bottom + Spacing.md,
               paddingLeft: insets.left + Spacing.xs,
+              backgroundColor: theme.backgroundDefault,
             },
           ]}
         >
           <View style={styles.sidebarHeader}>
-            <Ionicons name="tv" size={compact ? 26 : 30} color={Colors.dark.primary} />
+            <Ionicons name="tv" size={compact ? 26 : 30} color={theme.primary} />
             {!compact ? (
-              <ThemedText type="h4" style={styles.sidebarTitle}>
+              <ThemedText type="h4" style={[styles.sidebarTitle, { color: theme.primary }]}>
                 IPTV
               </ThemedText>
             ) : null}
@@ -234,7 +239,7 @@ export default function MainTabNavigator() {
   }
 
   return (
-    <View style={[styles.container, { flexDirection: "column" }]}>
+    <View style={[styles.container, { flexDirection: "column", backgroundColor: theme.backgroundRoot }]}>
       <View style={[styles.content, { paddingBottom: 60 + insets.bottom }]}>
         {renderScreen()}
       </View>
@@ -246,6 +251,8 @@ export default function MainTabNavigator() {
             paddingBottom: insets.bottom,
             paddingLeft: insets.left,
             paddingRight: insets.right,
+            backgroundColor: theme.backgroundDefault,
+            borderTopColor: theme.backgroundSecondary,
           },
         ]}
       >
@@ -287,10 +294,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: Colors.dark.backgroundRoot,
   },
   sidebar: {
-    backgroundColor: Colors.dark.backgroundDefault,
     paddingHorizontal: Spacing.xs,
   },
   sidebarHeader: {
@@ -299,7 +304,6 @@ const styles = StyleSheet.create({
   },
   sidebarTitle: {
     marginTop: Spacing.sm,
-    color: Colors.dark.primary,
     fontWeight: "700",
   },
   sidebarNav: {
@@ -311,15 +315,6 @@ const styles = StyleSheet.create({
     padding: Spacing.sm,
     borderRadius: BorderRadius.sm,
     gap: Spacing.xs,
-  },
-  sidebarItemActive: {
-    backgroundColor: Colors.dark.primary + "20",
-  },
-  sidebarItemFocused: {
-    borderWidth: 2,
-    borderColor: Colors.dark.primary,
-    backgroundColor: Colors.dark.primary + "40",
-    transform: [{ scale: 1.08 }],
   },
   sidebarLabel: {
     fontSize: 10,
@@ -334,22 +329,13 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     flexDirection: "row",
-    backgroundColor: Colors.dark.backgroundDefault,
     borderTopWidth: 1,
-    borderTopColor: Colors.dark.backgroundSecondary,
     paddingTop: Spacing.sm,
   },
   bottomTabItem: {
     flex: 1,
     alignItems: "center",
     gap: 4,
-  },
-  bottomTabItemFocused: {
-    borderWidth: 2,
-    borderColor: Colors.dark.primary,
-    borderRadius: BorderRadius.sm,
-    backgroundColor: Colors.dark.primary + "40",
-    transform: [{ scale: 1.08 }],
   },
   bottomTabLabel: {
     fontSize: 10,
