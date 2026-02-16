@@ -144,7 +144,7 @@ async function fetchPlaylistContent(url: string): Promise<string | null> {
   return null;
 }
 
-export async function fetchAndParseM3U(url: string): Promise<Playlist> {
+export async function fetchAndParseM3U(url: string, customName?: string): Promise<Playlist> {
   const content = await fetchPlaylistContent(url);
   
   if (!content) {
@@ -153,7 +153,7 @@ export async function fetchAndParseM3U(url: string): Promise<Playlist> {
   
   const urlParts = url.split("/");
   const fileName = urlParts[urlParts.length - 1].split("?")[0].replace(".m3u", "").replace(".m3u8", "");
-  const playlistName = fileName || "Remote Playlist";
+  const playlistName = customName || fileName || "Remote Playlist";
   
   const playlist = parseM3U(content, playlistName);
   playlist.url = url;

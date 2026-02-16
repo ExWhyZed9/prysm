@@ -282,6 +282,33 @@ export async function deletePlaylist(playlistId: string): Promise<void> {
   }
 }
 
+export async function updatePlaylistInfo(playlistId: string, name: string, url?: string): Promise<void> {
+  try {
+    const metaStr = await AsyncStorage.getItem(`${STORAGE_KEYS.PLAYLIST_META}${playlistId}`);
+    if (metaStr) {
+      const meta: PlaylistMeta = JSON.parse(metaStr);
+      meta.name = name;
+      if (url !== undefined) {
+        meta.url = url;
+      }
+      await AsyncStorage.setItem(`${STORAGE_KEYS.PLAYLIST_META}${playlistId}`, JSON.stringify(meta));
+    }
+
+    const playlists = await getPlaylistList();
+    const playlistIndex = playlists.findIndex(p => p.id === playlistId);
+    if (playlistIndex >= 0) {
+      playlists[playlistIndex].name = name;
+      if (url !== undefined) {
+        playlists[playlistIndex].url = url;
+      }
+      await savePlaylistList(playlists);
+    }
+  } catch (error) {
+    console.error("Error updating playlist info:", error);
+    throw error;
+  }
+}
+
 export async function clearPlaylist(): Promise<void> {
   try {
     const allKeys = await AsyncStorage.getAllKeys();

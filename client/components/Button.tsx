@@ -1,5 +1,5 @@
 import React, { ReactNode, useState } from "react";
-import { StyleSheet, Pressable, ViewStyle, StyleProp, ActivityIndicator, Platform } from "react-native";
+import { StyleSheet, Pressable, ViewStyle, TextStyle, StyleProp, ActivityIndicator, Platform } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -16,6 +16,7 @@ interface ButtonProps {
   onPress?: () => void;
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
   disabled?: boolean;
   loading?: boolean;
   variant?: "primary" | "secondary";
@@ -36,6 +37,7 @@ export function Button({
   onPress,
   children,
   style,
+  textStyle,
   disabled = false,
   loading = false,
   variant = "primary",
@@ -106,6 +108,7 @@ export function Button({
               color:
                 variant === "primary" ? Colors.dark.buttonText : Colors.dark.text,
             },
+            textStyle,
           ]}
         >
           {children}

@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { StyleSheet, View, ScrollView, Modal, Pressable, useWindowDimensions, Platform, ViewStyle } from "react-native";
+import { StyleSheet, View, ScrollView, Modal, Pressable, TextInput, useWindowDimensions, Platform, ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -107,6 +107,7 @@ export default function SettingsScreen() {
     activePlaylistId,
     settings,
     updateSettings,
+    updatePlaylistInfo,
     switchPlaylist,
     deletePlaylist,
     clearAllData,
@@ -119,7 +120,11 @@ export default function SettingsScreen() {
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [showDeletePlaylistModal, setShowDeletePlaylistModal] = useState(false);
   const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
+  const [showEditPlaylistModal, setShowEditPlaylistModal] = useState(false);
   const [playlistToDelete, setPlaylistToDelete] = useState<string | null>(null);
+  const [playlistToEdit, setPlaylistToEdit] = useState<string | null>(null);
+  const [editPlaylistName, setEditPlaylistName] = useState("");
+  const [editPlaylistUrl, setEditPlaylistUrl] = useState("");
 
   const isTV = Platform.isTV;
   const useColumns = width > 700;
@@ -192,6 +197,32 @@ export default function SettingsScreen() {
   const handleAddPlaylist = () => {
     if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate("Setup", { fromSettings: true });
+  };
+
+  const handleEditPlaylist = (playlistId: string) => {
+    const playlistInfo = playlists.find(p => p.id === playlistId);
+    if (playlistInfo) {
+      setPlaylistToEdit(playlistId);
+      setEditPlaylistName(playlistInfo.name);
+      setEditPlaylistUrl(playlistInfo.url || "");
+      setShowPlaylistModal(false);
+      setShowEditPlaylistModal(true);
+    }
+  };
+
+  const handleSaveEditPlaylist = async () => {
+    if (playlistToEdit && editPlaylistName.trim()) {
+      try {
+        if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        await updatePlaylistInfo(playlistToEdit, editPlaylistName.trim(), editPlaylistUrl.trim() || undefined);
+        setShowEditPlaylistModal(false);
+        setPlaylistToEdit(null);
+        setEditPlaylistName("");
+        setEditPlaylistUrl("");
+      } catch (err) {
+        console.error("Failed to update playlist:", err);
+      }
+    }
   };
 
   const getQualityLabel = () => {
@@ -593,6 +624,15 @@ export default function SettingsScreen() {
                     ) : null}
                   </FocusablePressable>
                   <FocusablePressable
+                    onPress={() => handleEditPlaylist(p.id)}
+                    hitSlop={8}
+                    accessibilityLabel={`Edit playlist ${p.name}`}
+                    baseStyle={styles.editButton}
+                    focusedStyle={styles.editButtonFocused}
+                  >
+                    <Ionicons name="create-outline" size={18} color={theme.primary} />
+                  </FocusablePressable>
+                  <FocusablePressable
                     onPress={() => {
                       setPlaylistToDelete(p.id);
                       setShowPlaylistModal(false);
@@ -644,6 +684,7 @@ export default function SettingsScreen() {
                   styles.confirmButton,
                   { backgroundColor: theme.backgroundSecondary },
                 ]}
+                textStyle={{ color: theme.text }}
               >
                 Cancel
               </Button>
@@ -693,6 +734,7 @@ export default function SettingsScreen() {
                   styles.confirmButton,
                   { backgroundColor: theme.backgroundSecondary },
                 ]}
+                textStyle={{ color: theme.text }}
               >
                 Cancel
               </Button>
@@ -704,6 +746,87 @@ export default function SettingsScreen() {
                 ]}
               >
                 Clear All
+              </Button>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={showEditPlaylistModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowEditPlaylistModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowEditPlaylistModal(false)}
+        >
+          <View
+            style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}
+            onStartShouldSetResponder={() => true}
+          >
+            <ThemedText type="h4" style={styles.modalTitle}>
+              Edit Playlist
+            </ThemedText>
+            <View style={styles.editInputContainer}>
+              <ThemedText type="small" style={[styles.editInputLabel, { color: theme.textSecondary }]}>
+                Playlist Name
+              </ThemedText>
+              <TextInput
+                value={editPlaylistName}
+                onChangeText={setEditPlaylistName}
+                placeholder="My Playlist"
+                placeholderTextColor={theme.textSecondary}
+                style={[
+                  styles.editInput,
+                  {
+                    color: theme.text,
+                    backgroundColor: theme.backgroundSecondary,
+                    borderColor: theme.backgroundSecondary,
+                  }
+                ]}
+              />
+            </View>
+            <View style={styles.editInputContainer}>
+              <ThemedText type="small" style={[styles.editInputLabel, { color: theme.textSecondary }]}>
+                Playlist URL (optional)
+              </ThemedText>
+              <TextInput
+                value={editPlaylistUrl}
+                onChangeText={setEditPlaylistUrl}
+                placeholder="https://example.com/playlist.m3u"
+                placeholderTextColor={theme.textSecondary}
+                style={[
+                  styles.editInput,
+                  {
+                    color: theme.text,
+                    backgroundColor: theme.backgroundSecondary,
+                    borderColor: theme.backgroundSecondary,
+                  }
+                ]}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+              />
+            </View>
+            <View style={styles.confirmButtons}>
+              <Button
+                onPress={() => setShowEditPlaylistModal(false)}
+                style={[
+                  styles.confirmButton,
+                  { backgroundColor: theme.backgroundSecondary },
+                ]}
+                textStyle={{ color: theme.text }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onPress={handleSaveEditPlaylist}
+                style={styles.confirmButton}
+                disabled={!editPlaylistName.trim()}
+              >
+                Save
               </Button>
             </View>
           </View>
@@ -814,6 +937,30 @@ const styles = StyleSheet.create({
   deleteButtonFocused: {
     borderColor: Colors.dark.error,
     backgroundColor: Colors.dark.error + "20",
+  },
+  editButton: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.xs,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  editButtonFocused: {
+    borderColor: Colors.dark.primary,
+    backgroundColor: Colors.dark.primary + "20",
+  },
+  editInputContainer: {
+    marginBottom: Spacing.md,
+  },
+  editInputLabel: {
+    marginBottom: Spacing.xs,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  editInput: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    fontSize: 14,
   },
   confirmIcon: {
     alignSelf: "center",

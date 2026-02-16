@@ -39,6 +39,7 @@ export default function SetupScreen() {
   const { isPortrait, isLandscape, width, height } = useOrientation();
   const { loadPlaylistFromUrl, loadPlaylistFromFile, isLoadingPlaylist, cancelLoading } = usePlaylist();
 
+  const [playlistName, setPlaylistName] = useState("");
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loadingType, setLoadingType] = useState<"url" | "file" | null>(null);
@@ -66,6 +67,11 @@ export default function SetupScreen() {
       return;
     }
 
+    if (!playlistName.trim()) {
+      setError("Please enter a playlist name");
+      return;
+    }
+
     try {
       setError(null);
       setLoadingType("url");
@@ -75,7 +81,7 @@ export default function SetupScreen() {
 
       setLoadingProgress("Fetching playlist...");
 
-      await loadPlaylistFromUrl(url.trim());
+      await loadPlaylistFromUrl(url.trim(), playlistName.trim());
       if (!isTVDevice) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowLoadingModal(false);
       if (fromSettings) {
@@ -93,6 +99,11 @@ export default function SetupScreen() {
   };
 
   const handleLoadFromFile = async () => {
+    if (!playlistName.trim()) {
+      setError("Please enter a playlist name before selecting a file");
+      return;
+    }
+
     try {
       setError(null);
       const result = await DocumentPicker.getDocumentAsync({
@@ -112,9 +123,8 @@ export default function SetupScreen() {
       if (!isTVDevice) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
       const content = await FileSystem.readAsStringAsync(file.uri);
-      const fileName = file.name.replace(/\.(m3u8?|txt)$/i, "") || "Playlist";
 
-      await loadPlaylistFromFile(content, fileName);
+      await loadPlaylistFromFile(content, playlistName.trim());
       if (!isTVDevice) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowLoadingModal(false);
       if (fromSettings) {
@@ -197,6 +207,36 @@ export default function SetupScreen() {
           <View style={[styles.form, isLandscape ? styles.formWide : styles.formNarrow]}>
               <View style={[styles.inputSection, { maxWidth: isLandscape ? 320 : 400 }]}>
                 <ThemedText type="h4" style={[styles.sectionTitle, isCompact && styles.sectionTitleCompact]}>
+                  Playlist Name
+                </ThemedText>
+                <View
+                  style={[
+                    styles.inputContainer,
+                    { backgroundColor: theme.backgroundDefault, borderColor: theme.backgroundSecondary },
+                    isCompact && styles.inputContainerCompact,
+                  ]}
+                >
+                  <Ionicons
+                    name="bookmark"
+                    size={18}
+                    color={theme.textSecondary}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    value={playlistName}
+                    onChangeText={setPlaylistName}
+                    placeholder="My Playlist"
+                    placeholderTextColor={theme.textSecondary}
+                    style={[styles.input, { color: theme.text }]}
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                    returnKeyType="next"
+                    editable={!isLoadingPlaylist}
+                    testID="name-input"
+                  />
+                </View>
+
+                <ThemedText type="h4" style={[styles.sectionTitle, isCompact && styles.sectionTitleCompact]}>
                   Enter Playlist URL
                 </ThemedText>
                 <View
@@ -230,7 +270,7 @@ export default function SetupScreen() {
 
                 <Button
                   onPress={handleLoadFromUrl}
-                  disabled={isLoadingPlaylist || !url.trim()}
+                  disabled={isLoadingPlaylist || !url.trim() || !playlistName.trim()}
                   style={[styles.button, isCompact && styles.buttonCompact]}
                 >
                   {loadingType === "url" ? (
@@ -255,8 +295,8 @@ export default function SetupScreen() {
                   onPress={handleLoadFromFile}
                   onFocus={() => setIsFileFocused(true)}
                   onBlur={() => setIsFileFocused(false)}
-                  disabled={isLoadingPlaylist}
-                  focusable={!isLoadingPlaylist}
+                  disabled={isLoadingPlaylist || !playlistName.trim()}
+                  focusable={!isLoadingPlaylist && !!playlistName.trim()}
                   accessibilityLabel="Choose file"
                   accessibilityRole="button"
                   style={[

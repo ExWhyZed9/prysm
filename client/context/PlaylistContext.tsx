@@ -16,8 +16,9 @@ interface PlaylistContextType {
   isLoadingPlaylist: boolean;
   cancelLoading: () => void;
   error: string | null;
-  loadPlaylistFromUrl: (url: string) => Promise<void>;
+  loadPlaylistFromUrl: (url: string, name: string) => Promise<void>;
   loadPlaylistFromFile: (content: string, name: string) => Promise<void>;
+  updatePlaylistInfo: (playlistId: string, name: string, url?: string) => Promise<void>;
   switchPlaylist: (playlistId: string) => Promise<void>;
   deletePlaylist: (playlistId: string) => Promise<void>;
   toggleFavorite: (channelId: string) => Promise<void>;
@@ -191,11 +192,11 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const loadPlaylistFromUrl = async (url: string) => {
+  const loadPlaylistFromUrl = async (url: string, name: string) => {
     try {
       setIsLoadingPlaylist(true);
       setError(null);
-      const newPlaylist = await fetchAndParseM3U(url);
+      const newPlaylist = await fetchAndParseM3U(url, name);
       await storage.savePlaylist(newPlaylist, "m3u");
       setPlaylist(newPlaylist);
       setActivePlaylistId(newPlaylist.id);
@@ -240,6 +241,21 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
       setError(err.message || "Failed to switch playlist");
     } finally {
       setIsLoadingPlaylist(false);
+    }
+  };
+
+  const updatePlaylistInfo = async (playlistId: string, name: string, url?: string) => {
+    try {
+      await storage.updatePlaylistInfo(playlistId, name, url);
+      const updatedPlaylists = await storage.getPlaylistList();
+      setPlaylists(updatedPlaylists);
+      
+      if (activePlaylistId === playlistId && playlist) {
+        setPlaylist({ ...playlist, name, url: url || playlist.url });
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to update playlist");
+      throw err;
     }
   };
 
@@ -386,6 +402,7 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
         error,
         loadPlaylistFromUrl,
         loadPlaylistFromFile,
+        updatePlaylistInfo,
         switchPlaylist,
         deletePlaylist: deletePlaylistFn,
         toggleFavorite,
