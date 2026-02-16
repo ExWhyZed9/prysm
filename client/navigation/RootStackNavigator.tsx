@@ -16,7 +16,7 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootStackNavigator() {
-  const { playlist, isLoading } = usePlaylist();
+  const { isLoading } = usePlaylist();
   const screenOptions = useScreenOptions();
 
   if (isLoading) {
@@ -25,41 +25,31 @@ export default function RootStackNavigator() {
 
   return (
     <Stack.Navigator screenOptions={screenOptions}>
-      {playlist ? (
-        <>
-          <Stack.Screen
-            name="Main"
-            component={MainTabNavigator}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="Setup"
-            component={SetupScreen}
-            options={{
-              headerShown: false,
-              presentation: "modal",
-              animation: "slide_from_bottom",
-            }}
-          />
-          <Stack.Screen
-            name="Player"
-            component={PlayerScreen}
-            options={{
-              headerShown: false,
-              presentation: "fullScreenModal",
-              animation: "fade",
-              autoHideHomeIndicator: true,
-              navigationBarHidden: true,
-            }}
-          />
-        </>
-      ) : (
-        <Stack.Screen
-          name="Setup"
-          component={SetupScreen}
-          options={{ headerShown: false }}
-        />
-      )}
+      <Stack.Screen
+        name="Main"
+        component={MainTabNavigator}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="Setup"
+        component={SetupScreen}
+        options={{
+          headerShown: false,
+          presentation: "modal",
+          animation: "slide_from_bottom",
+        }}
+      />
+      <Stack.Screen
+        name="Player"
+        component={PlayerScreen}
+        options={{
+          headerShown: false,
+          presentation: "fullScreenModal",
+          animation: "fade",
+          autoHideHomeIndicator: true,
+          navigationBarHidden: true,
+        }}
+      />
     </Stack.Navigator>
   );
 }

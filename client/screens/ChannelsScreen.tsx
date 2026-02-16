@@ -429,8 +429,8 @@ export default function ChannelsScreen() {
         <View style={styles.emptyContainer}>
           <EmptyState
             image={emptyChannelsImage}
-            title="No Channels"
-            description="Add a playlist to start watching"
+            title="No Playlist Loaded"
+            description="Go to Settings to add your M3U playlist"
           />
         </View>
       </ThemedView>
