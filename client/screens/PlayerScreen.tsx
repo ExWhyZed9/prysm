@@ -129,12 +129,12 @@ export default function PlayerScreen() {
 
     const newChannel = playlist.channels[newIndex];
     if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    navigation.push("Player", { channelId: newChannel.id });
+    navigation.replace("Player", { channelId: newChannel.id });
   }, [playlist, channelId, navigation]);
 
   const handleChannelSelect = useCallback((selectedChannelId: string) => {
     if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    navigation.push("Player", { channelId: selectedChannelId });
+    navigation.replace("Player", { channelId: selectedChannelId });
   }, [navigation]);
 
   const handleError = useCallback((error: string) => {
