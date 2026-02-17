@@ -246,16 +246,33 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
 
   const updatePlaylistInfo = async (playlistId: string, name: string, url?: string) => {
     try {
-      await storage.updatePlaylistInfo(playlistId, name, url);
+      const currentPlaylistInfo = playlists.find(p => p.id === playlistId);
+      const urlChanged = url && currentPlaylistInfo?.url !== url;
+      
+      if (urlChanged && url) {
+        setIsLoadingPlaylist(true);
+        const newPlaylist = await fetchAndParseM3U(url, name);
+        newPlaylist.id = playlistId;
+        await storage.savePlaylist(newPlaylist, "m3u");
+        
+        if (activePlaylistId === playlistId) {
+          setPlaylist(newPlaylist);
+        }
+      } else {
+        await storage.updatePlaylistInfo(playlistId, name, url);
+        
+        if (activePlaylistId === playlistId && playlist) {
+          setPlaylist({ ...playlist, name, url: url || playlist.url });
+        }
+      }
+      
       const updatedPlaylists = await storage.getPlaylistList();
       setPlaylists(updatedPlaylists);
-      
-      if (activePlaylistId === playlistId && playlist) {
-        setPlaylist({ ...playlist, name, url: url || playlist.url });
-      }
     } catch (err: any) {
       setError(err.message || "Failed to update playlist");
       throw err;
+    } finally {
+      setIsLoadingPlaylist(false);
     }
   };
 

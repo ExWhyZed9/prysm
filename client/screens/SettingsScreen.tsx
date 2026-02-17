@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { StyleSheet, View, ScrollView, Modal, Pressable, TextInput, useWindowDimensions, Platform, ViewStyle } from "react-native";
+import { StyleSheet, View, ScrollView, Modal, Pressable, TextInput, useWindowDimensions, Platform, ViewStyle, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -111,6 +111,7 @@ export default function SettingsScreen() {
     switchPlaylist,
     deletePlaylist,
     clearAllData,
+    isLoadingPlaylist,
   } = usePlaylist();
 
   const [showQualityModal, setShowQualityModal] = useState(false);
@@ -818,15 +819,20 @@ export default function SettingsScreen() {
                   { backgroundColor: theme.backgroundSecondary },
                 ]}
                 textStyle={{ color: theme.text }}
+                disabled={isLoadingPlaylist}
               >
                 Cancel
               </Button>
               <Button
                 onPress={handleSaveEditPlaylist}
                 style={styles.confirmButton}
-                disabled={!editPlaylistName.trim()}
+                disabled={!editPlaylistName.trim() || isLoadingPlaylist}
               >
-                Save
+                {isLoadingPlaylist ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  "Save"
+                )}
               </Button>
             </View>
           </View>

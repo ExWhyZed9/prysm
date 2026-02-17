@@ -518,18 +518,15 @@ export default function ChannelsScreen() {
               <FocusableCloseButton onPress={closeDrawer} theme={theme} />
             </View>
             
-            <ScrollView
-              style={styles.drawerScroll}
-              showsVerticalScrollIndicator={false}
-            >
-              {categories.map((cat) => {
+            <FlashList
+              data={categories}
+              renderItem={({ item: cat }) => {
                 const isSelected = selectedCategory === cat;
                 const isFav = isCategoryFavorite(cat);
                 const count = categoryChannelCounts[cat] || 0;
                 
                 return (
                   <FocusableCategoryItem
-                    key={cat}
                     cat={cat}
                     isSelected={isSelected}
                     isFav={isFav}
@@ -539,8 +536,14 @@ export default function ChannelsScreen() {
                     theme={theme}
                   />
                 );
-              })}
-            </ScrollView>
+              }}
+              keyExtractor={(item) => item}
+              estimatedItemSize={56}
+              contentContainerStyle={{
+                paddingTop: Spacing.sm,
+              }}
+              showsVerticalScrollIndicator={false}
+            />
           </Animated.View>
         </View>
       </Modal>
@@ -666,10 +669,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.dark.primary,
     backgroundColor: Colors.dark.primary + "20",
   },
-  drawerScroll: {
-    flex: 1,
-    paddingTop: Spacing.sm,
-  },
+
   categoryItem: {
     flexDirection: "row",
     alignItems: "center",
