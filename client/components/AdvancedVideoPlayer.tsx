@@ -129,7 +129,24 @@ const SEEK_SECONDS = 10;
 
 const placeholderImage = require("../../assets/images/placeholder-channel.png");
 
-export function AdvancedVideoPlayer({
+const arePropsEqual = (
+  prevProps: AdvancedVideoPlayerProps,
+  nextProps: AdvancedVideoPlayerProps
+): boolean => {
+  return (
+    prevProps.source === nextProps.source &&
+    prevProps.title === nextProps.title &&
+    prevProps.subtitle === nextProps.subtitle &&
+    prevProps.poster === nextProps.poster &&
+    prevProps.autoPlay === nextProps.autoPlay &&
+    prevProps.isFavorite === nextProps.isFavorite &&
+    prevProps.isLive === nextProps.isLive &&
+    JSON.stringify(prevProps.headers) === JSON.stringify(nextProps.headers) &&
+    JSON.stringify(prevProps.drm) === JSON.stringify(nextProps.drm)
+  );
+};
+
+export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   source,
   title,
   subtitle,
@@ -1187,7 +1204,7 @@ export function AdvancedVideoPlayer({
       </Modal>
     </GestureHandlerRootView>
   );
-}
+}, arePropsEqual);
 
 const styles = StyleSheet.create({
   container: {

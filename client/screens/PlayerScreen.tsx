@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useCallback } from "react";
 import { StyleSheet, View, Pressable, StatusBar, Platform } from "react-native";
 
 const isTV = Platform.isTV;
@@ -100,17 +100,17 @@ export default function PlayerScreen() {
     };
   }, []);
 
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.goBack();
-  };
+  }, [navigation]);
 
-  const handleFavorite = async () => {
+  const handleFavorite = useCallback(async () => {
     if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await toggleFavorite(channelId);
-  };
+  }, [channelId, toggleFavorite]);
 
-  const handleChannelNav = (direction: "prev" | "next") => {
+  const handleChannelNav = useCallback((direction: "prev" | "next") => {
     if (!playlist) return;
 
     const currentIndex = playlist.channels.findIndex(
@@ -129,19 +129,19 @@ export default function PlayerScreen() {
 
     const newChannel = playlist.channels[newIndex];
     if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    navigation.replace("Player", { channelId: newChannel.id });
-  };
+    navigation.push("Player", { channelId: newChannel.id });
+  }, [playlist, channelId, navigation]);
 
-  const handleChannelSelect = (selectedChannelId: string) => {
+  const handleChannelSelect = useCallback((selectedChannelId: string) => {
     if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    navigation.replace("Player", { channelId: selectedChannelId });
-  };
+    navigation.push("Player", { channelId: selectedChannelId });
+  }, [navigation]);
 
-  const handleError = (error: string) => {
+  const handleError = useCallback((error: string) => {
     console.error("Player error:", error);
-  };
+  }, []);
 
-  const getDRMConfig = (): DRMConfig | undefined => {
+  const getDRMConfig = useCallback((): DRMConfig | undefined => {
     if (!channel?.drm) return undefined;
 
     return {
@@ -150,9 +150,9 @@ export default function PlayerScreen() {
       headers: channel.drm.headers,
       certificateUrl: channel.drm.certificateUrl,
     };
-  };
+  }, [channel]);
 
-  const getStreamHeaders = (): Record<string, string> | undefined => {
+  const getStreamHeaders = useCallback((): Record<string, string> | undefined => {
     const streamHeaders: Record<string, string> = {};
     if (channel?.headers) {
       Object.assign(streamHeaders, channel.headers);
@@ -164,7 +164,7 @@ export default function PlayerScreen() {
       return undefined;
     }
     return streamHeaders;
-  };
+  }, [channel]);
 
   if (!channel) {
     return (
