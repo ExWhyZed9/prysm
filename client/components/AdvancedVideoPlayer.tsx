@@ -1268,6 +1268,8 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: "space-between",
     backgroundColor: "rgba(0,0,0,0.4)",
+    zIndex: 10,
+    elevation: 10,
   },
   topControls: {
     flexDirection: "row",
