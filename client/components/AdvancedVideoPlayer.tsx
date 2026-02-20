@@ -1,4 +1,10 @@
-import React, { useRef, useState, useEffect, useCallback, useMemo } from "react";
+import React, {
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
 import {
   StyleSheet,
   View,
@@ -36,7 +42,17 @@ import { Channel } from "@/types/playlist";
 
 const isTV = Platform.isTV;
 
-function TVFocusablePressable({ onPress, baseStyle, focusedStyle, children, hitSlop, focusable = true, hasTVPreferredFocus, accessibilityLabel, accessibilityRole = "button" as const }: {
+function TVFocusablePressable({
+  onPress,
+  baseStyle,
+  focusedStyle,
+  children,
+  hitSlop,
+  focusable = true,
+  hasTVPreferredFocus,
+  accessibilityLabel,
+  accessibilityRole = "button" as const,
+}: {
   onPress: () => void;
   baseStyle: any;
   focusedStyle: ViewStyle;
@@ -118,10 +134,30 @@ export interface AdvancedVideoPlayerProps {
   isLive?: boolean;
 }
 
-const CONTENT_FIT_OPTIONS: { label: string; description: string; value: VideoContentFit; icon: string }[] = [
-  { label: "Fit", description: "Show full video with bars", value: "contain", icon: "contract-outline" },
-  { label: "Fill", description: "Fill screen, may crop edges", value: "cover", icon: "expand-outline" },
-  { label: "Stretch", description: "Stretch to fill screen", value: "fill", icon: "resize-outline" },
+const CONTENT_FIT_OPTIONS: {
+  label: string;
+  description: string;
+  value: VideoContentFit;
+  icon: string;
+}[] = [
+  {
+    label: "Fit",
+    description: "Show full video with bars",
+    value: "contain",
+    icon: "contract-outline",
+  },
+  {
+    label: "Fill",
+    description: "Fill screen, may crop edges",
+    value: "cover",
+    icon: "expand-outline",
+  },
+  {
+    label: "Stretch",
+    description: "Stretch to fill screen",
+    value: "fill",
+    icon: "resize-outline",
+  },
 ];
 
 const CONTROLS_TIMEOUT = 5000;
@@ -131,7 +167,7 @@ const placeholderImage = require("../../assets/images/placeholder-channel.png");
 
 const arePropsEqual = (
   prevProps: AdvancedVideoPlayerProps,
-  nextProps: AdvancedVideoPlayerProps
+  nextProps: AdvancedVideoPlayerProps,
 ): boolean => {
   return (
     prevProps.source === nextProps.source &&
@@ -190,15 +226,25 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   const [showSubtitleModal, setShowSubtitleModal] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
 
-  const [detectedQualities, setDetectedQualities] = useState<VideoQuality[]>([]);
+  const [detectedQualities, setDetectedQualities] = useState<VideoQuality[]>(
+    [],
+  );
   const [selectedQuality, setSelectedQuality] = useState<string>("auto");
   const [currentSource, setCurrentSource] = useState(source);
   const [contentFit, setContentFit] = useState<VideoContentFit>("contain");
-  const [selectedAudioTrack, setSelectedAudioTrack] = useState<string | null>(null);
-  const [selectedSubtitleTrack, setSelectedSubtitleTrack] = useState<string | null>(null);
+  const [selectedAudioTrack, setSelectedAudioTrack] = useState<string | null>(
+    null,
+  );
+  const [selectedSubtitleTrack, setSelectedSubtitleTrack] = useState<
+    string | null
+  >(null);
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(false);
 
-  const [seekIndicator, setSeekIndicator] = useState<{ visible: boolean; direction: "forward" | "backward"; seconds: number }>({
+  const [seekIndicator, setSeekIndicator] = useState<{
+    visible: boolean;
+    direction: "forward" | "backward";
+    seconds: number;
+  }>({
     visible: false,
     direction: "forward",
     seconds: 0,
@@ -208,8 +254,15 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   const recentPanelTranslate = useSharedValue(300);
   const seekIndicatorOpacity = useSharedValue(0);
   const lockIndicatorOpacity = useSharedValue(0);
+  const showControlsRef = useRef(showControls);
+  const resetControlsTimeoutRef = useRef<() => void>(() => {});
 
-  const qualities = detectedQualities.length > 0 ? detectedQualities : propQualities;
+  useEffect(() => {
+    showControlsRef.current = showControls;
+  }, [showControls]);
+
+  const qualities =
+    detectedQualities.length > 0 ? detectedQualities : propQualities;
   const audioTracks = propAudioTracks;
   const subtitleTracks = propSubtitleTracks;
 
@@ -271,35 +324,48 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
 
   useEffect(() => {
     if (showRecentChannels) {
-      recentPanelTranslate.value = withSpring(0, { damping: 20, stiffness: 200 });
+      recentPanelTranslate.value = withSpring(0, {
+        damping: 20,
+        stiffness: 200,
+      });
     } else {
-      recentPanelTranslate.value = withSpring(300, { damping: 20, stiffness: 200 });
+      recentPanelTranslate.value = withSpring(300, {
+        damping: 20,
+        stiffness: 200,
+      });
     }
   }, [showRecentChannels]);
 
   useEffect(() => {
     if (!player) return;
 
-    const statusSubscription = player.addListener("statusChange", (payload: any) => {
-      const status = payload?.status || payload;
-      if (status === "readyToPlay") {
-        setIsLoading(false);
-        setError(null);
-        setIsBuffering(false);
-      } else if (status === "error") {
-        setIsLoading(false);
-        setIsBuffering(false);
-        setError("Failed to load stream");
-        onError?.("Failed to load stream");
-      } else if (status === "loading") {
-        setIsLoading(true);
-      }
-    });
+    const statusSubscription = player.addListener(
+      "statusChange",
+      (payload: any) => {
+        const status = payload?.status || payload;
+        if (status === "readyToPlay") {
+          setIsLoading(false);
+          setError(null);
+          setIsBuffering(false);
+        } else if (status === "error") {
+          setIsLoading(false);
+          setIsBuffering(false);
+          setError("Failed to load stream");
+          onError?.("Failed to load stream");
+        } else if (status === "loading") {
+          setIsLoading(true);
+        }
+      },
+    );
 
-    const playingSubscription = player.addListener("playingChange", (payload: any) => {
-      const playing = typeof payload === "boolean" ? payload : payload?.isPlaying;
-      setIsPlaying(!!playing);
-    });
+    const playingSubscription = player.addListener(
+      "playingChange",
+      (payload: any) => {
+        const playing =
+          typeof payload === "boolean" ? payload : payload?.isPlaying;
+        setIsPlaying(!!playing);
+      },
+    );
 
     const timeUpdateInterval = setInterval(() => {
       if (player && !isLive) {
@@ -319,17 +385,30 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     if (controlsTimeoutRef.current) {
       clearTimeout(controlsTimeoutRef.current);
     }
+    if (isTV) return;
     controlsTimeoutRef.current = setTimeout(() => {
-      if (isPlaying && !showSettingsModal && !showQualityModal && !showZoomModal && !showAudioModal && !showSubtitleModal) {
+      if (
+        isPlaying &&
+        !showSettingsModal &&
+        !showQualityModal &&
+        !showZoomModal &&
+        !showAudioModal &&
+        !showSubtitleModal
+      ) {
         setShowControls(false);
         setShowRecentChannels(false);
       }
     }, CONTROLS_TIMEOUT);
   };
 
-  const resetControlsTimeout = () => {
+  const resetControlsTimeout = useCallback(() => {
     startControlsTimeout();
-  };
+    resetControlsTimeoutRef.current();
+  }, []);
+
+  useEffect(() => {
+    resetControlsTimeoutRef.current = resetControlsTimeout;
+  }, [resetControlsTimeout]);
 
   const handleScreenTap = useCallback(() => {
     if (isLocked) {
@@ -354,7 +433,10 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
       const seekAmount = isLeftSide ? -SEEK_SECONDS : SEEK_SECONDS;
 
       if (player) {
-        const newTime = Math.max(0, Math.min(player.currentTime + seekAmount, duration));
+        const newTime = Math.max(
+          0,
+          Math.min(player.currentTime + seekAmount, duration),
+        );
         player.currentTime = newTime;
         if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
@@ -373,7 +455,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         }, 600);
       }
     },
-    [isLocked, isLive, player, width, duration]
+    [isLocked, isLive, player, width, duration],
   );
 
   const handlePlayPause = useCallback(() => {
@@ -397,7 +479,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
       }
       resetControlsTimeout();
     },
-    [player, currentTime, duration, isLive]
+    [player, currentTime, duration, isLive],
   );
 
   const handleQualitySelect = useCallback(
@@ -417,7 +499,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
       setShowQualityModal(false);
       resetControlsTimeout();
     },
-    [source, qualities]
+    [source, qualities],
   );
 
   const handleZoomSelect = useCallback((fit: VideoContentFit) => {
@@ -444,7 +526,9 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
 
   const handleAspectRatioCycle = useCallback(() => {
     if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const currentIndex = CONTENT_FIT_OPTIONS.findIndex((o) => o.value === contentFit);
+    const currentIndex = CONTENT_FIT_OPTIONS.findIndex(
+      (o) => o.value === contentFit,
+    );
     const nextIndex = (currentIndex + 1) % CONTENT_FIT_OPTIONS.length;
     setContentFit(CONTENT_FIT_OPTIONS[nextIndex].value);
     resetControlsTimeout();
@@ -473,7 +557,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
       onChannelSelect?.(channelId);
       setShowRecentChannels(false);
     },
-    [onChannelSelect]
+    [onChannelSelect],
   );
 
   const toggleRecentChannels = useCallback(() => {
@@ -491,27 +575,40 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
       const TVHandler = RN.TVEventHandler;
       if (TVHandler) {
         tvEventHandler = new TVHandler();
-        tvEventHandler.enable(null, (_cmp: any, evt: any) => {
+        tvEventHandler.enable({} as any, (_cmp: any, evt: any) => {
           if (!evt) return;
           const { eventType } = evt;
+          const controlsVisible = showControlsRef.current;
           if (eventType === "select" || eventType === "playPause") {
-            if (!showControls) {
+            if (!controlsVisible) {
               setShowControls(true);
+              resetControlsTimeoutRef.current();
+            } else {
+              resetControlsTimeoutRef.current();
             }
           } else if (eventType === "up" || eventType === "down") {
-            if (!showControls) {
+            if (!controlsVisible) {
               setShowControls(true);
+              resetControlsTimeoutRef.current();
+            } else {
+              resetControlsTimeoutRef.current();
             }
           } else if (eventType === "left") {
-            if (!showControls) {
+            if (!controlsVisible) {
               setShowControls(true);
+              resetControlsTimeoutRef.current();
+            } else {
+              resetControlsTimeoutRef.current();
             }
           } else if (eventType === "right") {
-            if (!showControls) {
+            if (!controlsVisible) {
               setShowControls(true);
+              resetControlsTimeoutRef.current();
+            } else {
+              resetControlsTimeoutRef.current();
             }
           } else if (eventType === "menu" || eventType === "back") {
-            if (showControls) {
+            if (controlsVisible) {
               setShowControls(false);
               setShowRecentChannels(false);
             } else if (onBack) {
@@ -520,7 +617,9 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
           }
         });
       }
-    } catch (e) {}
+    } catch (e) {
+      console.log("TVEventHandler error:", e);
+    }
 
     return () => {
       if (tvEventHandler) {
@@ -529,7 +628,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         } catch (e) {}
       }
     };
-  }, [showControls, handlePlayPause, onPrevious, onNext, onBack]);
+  }, [isTV, onBack]);
 
   const formatTime = (seconds: number): string => {
     const hrs = Math.floor(seconds / 3600);
@@ -579,7 +678,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
             player={player}
             style={styles.video}
             contentFit={contentFit}
-            nativeControls={false}
+            nativeControls={isTV ? true : false}
             allowsPictureInPicture
           />
 
@@ -595,7 +694,11 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
           {error ? (
             <View style={styles.errorOverlay} pointerEvents="box-none">
               <View style={styles.errorContent}>
-                <Ionicons name="cloud-offline" size={48} color={Colors.dark.error} />
+                <Ionicons
+                  name="cloud-offline"
+                  size={48}
+                  color={Colors.dark.error}
+                />
                 <ThemedText type="body" style={styles.errorText}>
                   {error}
                 </ThemedText>
@@ -612,8 +715,15 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                   accessibilityLabel="Retry"
                   accessibilityRole="button"
                 >
-                  <Ionicons name="refresh" size={20} color={Colors.dark.primary} />
-                  <ThemedText type="body" style={{ color: Colors.dark.primary, marginLeft: 8 }}>
+                  <Ionicons
+                    name="refresh"
+                    size={20}
+                    color={Colors.dark.primary}
+                  />
+                  <ThemedText
+                    type="body"
+                    style={{ color: Colors.dark.primary, marginLeft: 8 }}
+                  >
                     Retry
                   </ThemedText>
                 </Pressable>
@@ -625,12 +735,18 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
             <Animated.View
               style={[
                 styles.seekIndicator,
-                seekIndicator.direction === "backward" ? styles.seekIndicatorLeft : styles.seekIndicatorRight,
+                seekIndicator.direction === "backward"
+                  ? styles.seekIndicatorLeft
+                  : styles.seekIndicatorRight,
                 animatedSeekIndicatorStyle,
               ]}
             >
               <Ionicons
-                name={seekIndicator.direction === "backward" ? "play-back" : "play-forward"}
+                name={
+                  seekIndicator.direction === "backward"
+                    ? "play-back"
+                    : "play-forward"
+                }
                 size={32}
                 color="#FFFFFF"
               />
@@ -641,7 +757,9 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
           ) : null}
 
           {isLocked ? (
-            <Animated.View style={[styles.lockIndicator, animatedLockIndicatorStyle]}>
+            <Animated.View
+              style={[styles.lockIndicator, animatedLockIndicatorStyle]}
+            >
               <View style={styles.lockIndicatorContent}>
                 <Ionicons name="lock-closed" size={24} color="#FFFFFF" />
                 <ThemedText type="body" style={styles.lockIndicatorText}>
@@ -655,7 +773,10 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                   accessibilityLabel="Unlock controls"
                   accessibilityRole="button"
                 >
-                  <ThemedText type="small" style={{ color: Colors.dark.primary }}>
+                  <ThemedText
+                    type="small"
+                    style={{ color: Colors.dark.primary }}
+                  >
                     Tap to Unlock
                   </ThemedText>
                 </Pressable>
@@ -668,9 +789,18 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
       {/* CHANGED: pointerEvents uses "box-none" when visible to allow taps on empty space to pass through */}
       <Animated.View
         style={[styles.controlsOverlay, animatedControlsStyle]}
-        pointerEvents={showControls && !isLocked ? "box-none" : "none"}
+        pointerEvents={showControls && !isLocked && !isTV ? "box-none" : "none"}
       >
-        <View style={[styles.topControls, { paddingTop: insets.top + Spacing.sm, paddingLeft: insets.left + Spacing.md, paddingRight: insets.right + Spacing.md }]}>
+        <View
+          style={[
+            styles.topControls,
+            {
+              paddingTop: insets.top + Spacing.sm,
+              paddingLeft: insets.left + Spacing.md,
+              paddingRight: insets.right + Spacing.md,
+            },
+          ]}
+        >
           <View style={styles.topLeftControls}>
             {onBack ? (
               <TVFocusablePressable
@@ -680,19 +810,31 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 hitSlop={16}
                 accessibilityLabel="Go back"
               >
-                <Ionicons name="arrow-back" size={playerControls.icon} color="#FFFFFF" />
+                <Ionicons
+                  name="arrow-back"
+                  size={playerControls.icon}
+                  color="#FFFFFF"
+                />
               </TVFocusablePressable>
             ) : null}
           </View>
 
           <View style={styles.titleContainer}>
             {title ? (
-              <ThemedText type={isUltraWide ? "body" : "h4"} style={styles.title} numberOfLines={1}>
+              <ThemedText
+                type={isUltraWide ? "body" : "h4"}
+                style={styles.title}
+                numberOfLines={1}
+              >
                 {title}
               </ThemedText>
             ) : null}
             {subtitle ? (
-              <ThemedText type="small" style={styles.subtitle} numberOfLines={1}>
+              <ThemedText
+                type="small"
+                style={styles.subtitle}
+                numberOfLines={1}
+              >
                 {subtitle}
               </ThemedText>
             ) : null}
@@ -707,7 +849,11 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 hitSlop={16}
                 accessibilityLabel="Recent channels"
               >
-                <Ionicons name="time-outline" size={playerControls.icon} color="#FFFFFF" />
+                <Ionicons
+                  name="time-outline"
+                  size={playerControls.icon}
+                  color="#FFFFFF"
+                />
               </TVFocusablePressable>
             ) : null}
             {onFavoritePress ? (
@@ -716,7 +862,9 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 baseStyle={styles.controlButton}
                 focusedStyle={styles.controlButtonFocused}
                 hitSlop={16}
-                accessibilityLabel={isFavorite ? "Remove from favorites" : "Add to favorites"}
+                accessibilityLabel={
+                  isFavorite ? "Remove from favorites" : "Add to favorites"
+                }
               >
                 <Ionicons
                   name={isFavorite ? "star" : "star-outline"}
@@ -732,7 +880,11 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
               hitSlop={16}
               accessibilityLabel="Lock controls"
             >
-              <Ionicons name="lock-open-outline" size={playerControls.icon} color="#FFFFFF" />
+              <Ionicons
+                name="lock-open-outline"
+                size={playerControls.icon}
+                color="#FFFFFF"
+              />
             </TVFocusablePressable>
           </View>
         </View>
@@ -743,43 +895,69 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
               onPress={onPrevious}
               baseStyle={[
                 styles.navButton,
-                { width: playerControls.nav, height: playerControls.nav, borderRadius: playerControls.nav / 2 },
+                {
+                  width: playerControls.nav,
+                  height: playerControls.nav,
+                  borderRadius: playerControls.nav / 2,
+                },
               ]}
               focusedStyle={styles.navButtonFocused}
               hitSlop={16}
               accessibilityLabel="Previous channel"
             >
-              <Ionicons name="play-skip-back" size={playerControls.icon * 1.2} color="#FFFFFF" />
+              <Ionicons
+                name="play-skip-back"
+                size={playerControls.icon * 1.2}
+                color="#FFFFFF"
+              />
             </TVFocusablePressable>
           ) : !isLive ? (
             <TVFocusablePressable
               onPress={() => handleSeek(-SEEK_SECONDS)}
               baseStyle={[
                 styles.navButton,
-                { width: playerControls.nav, height: playerControls.nav, borderRadius: playerControls.nav / 2 },
+                {
+                  width: playerControls.nav,
+                  height: playerControls.nav,
+                  borderRadius: playerControls.nav / 2,
+                },
               ]}
               focusedStyle={styles.navButtonFocused}
               hitSlop={16}
               accessibilityLabel="Seek backward"
             >
-              <Ionicons name="play-back" size={playerControls.icon * 1.2} color="#FFFFFF" />
+              <Ionicons
+                name="play-back"
+                size={playerControls.icon * 1.2}
+                color="#FFFFFF"
+              />
             </TVFocusablePressable>
           ) : (
-            <View style={{ width: playerControls.nav, height: playerControls.nav }} />
+            <View
+              style={{ width: playerControls.nav, height: playerControls.nav }}
+            />
           )}
 
           <TVFocusablePressable
             onPress={handlePlayPause}
             baseStyle={[
               styles.playButton,
-              { width: playerControls.play, height: playerControls.play, borderRadius: playerControls.play / 2 },
+              {
+                width: playerControls.play,
+                height: playerControls.play,
+                borderRadius: playerControls.play / 2,
+              },
             ]}
             focusedStyle={styles.playButtonFocused}
             hitSlop={16}
             hasTVPreferredFocus={isTV && showControls}
             accessibilityLabel={isPlaying ? "Pause" : "Play"}
           >
-            <Ionicons name={isPlaying ? "pause" : "play"} size={playerControls.icon * 1.8} color="#FFFFFF" />
+            <Ionicons
+              name={isPlaying ? "pause" : "play"}
+              size={playerControls.icon * 1.8}
+              color="#FFFFFF"
+            />
           </TVFocusablePressable>
 
           {onNext ? (
@@ -787,40 +965,69 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
               onPress={onNext}
               baseStyle={[
                 styles.navButton,
-                { width: playerControls.nav, height: playerControls.nav, borderRadius: playerControls.nav / 2 },
+                {
+                  width: playerControls.nav,
+                  height: playerControls.nav,
+                  borderRadius: playerControls.nav / 2,
+                },
               ]}
               focusedStyle={styles.navButtonFocused}
               hitSlop={16}
               accessibilityLabel="Next channel"
             >
-              <Ionicons name="play-skip-forward" size={playerControls.icon * 1.2} color="#FFFFFF" />
+              <Ionicons
+                name="play-skip-forward"
+                size={playerControls.icon * 1.2}
+                color="#FFFFFF"
+              />
             </TVFocusablePressable>
           ) : !isLive ? (
             <TVFocusablePressable
               onPress={() => handleSeek(SEEK_SECONDS)}
               baseStyle={[
                 styles.navButton,
-                { width: playerControls.nav, height: playerControls.nav, borderRadius: playerControls.nav / 2 },
+                {
+                  width: playerControls.nav,
+                  height: playerControls.nav,
+                  borderRadius: playerControls.nav / 2,
+                },
               ]}
               focusedStyle={styles.navButtonFocused}
               hitSlop={16}
               accessibilityLabel="Seek forward"
             >
-              <Ionicons name="play-forward" size={playerControls.icon * 1.2} color="#FFFFFF" />
+              <Ionicons
+                name="play-forward"
+                size={playerControls.icon * 1.2}
+                color="#FFFFFF"
+              />
             </TVFocusablePressable>
           ) : (
-            <View style={{ width: playerControls.nav, height: playerControls.nav }} />
+            <View
+              style={{ width: playerControls.nav, height: playerControls.nav }}
+            />
           )}
         </View>
 
-        <View style={[styles.bottomControls, { paddingBottom: insets.bottom + Spacing.sm, paddingLeft: insets.left + Spacing.md, paddingRight: insets.right + Spacing.md }]}>
+        <View
+          style={[
+            styles.bottomControls,
+            {
+              paddingBottom: insets.bottom + Spacing.sm,
+              paddingLeft: insets.left + Spacing.md,
+              paddingRight: insets.right + Spacing.md,
+            },
+          ]}
+        >
           {!isLive ? (
             <View style={styles.progressContainer}>
               <ThemedText type="caption" style={styles.timeText}>
                 {formatTime(currentTime)}
               </ThemedText>
               <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: `${progress}%` }]} />
+                <View
+                  style={[styles.progressFill, { width: `${progress}%` }]}
+                />
               </View>
               <ThemedText type="caption" style={styles.timeText}>
                 {formatTime(duration)}
@@ -840,7 +1047,11 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
               ) : null}
               {drm ? (
                 <View style={styles.badge}>
-                  <Ionicons name="shield-checkmark" size={12} color={Colors.dark.success} />
+                  <Ionicons
+                    name="shield-checkmark"
+                    size={12}
+                    color={Colors.dark.success}
+                  />
                   <ThemedText type="caption" style={styles.badgeText}>
                     DRM
                   </ThemedText>
@@ -880,7 +1091,15 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
       </Animated.View>
 
       <Animated.View
-        style={[styles.recentChannelsPanel, animatedRecentPanelStyle, { paddingRight: insets.right, paddingTop: insets.top, paddingBottom: insets.bottom }]}
+        style={[
+          styles.recentChannelsPanel,
+          animatedRecentPanelStyle,
+          {
+            paddingRight: insets.right,
+            paddingTop: insets.top,
+            paddingBottom: insets.bottom,
+          },
+        ]}
         pointerEvents={showRecentChannels ? "auto" : "none"}
       >
         <View style={styles.recentChannelsHeader}>
@@ -913,10 +1132,18 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 contentFit="contain"
               />
               <View style={styles.recentChannelInfo}>
-                <ThemedText type="small" numberOfLines={1} style={styles.recentChannelName}>
+                <ThemedText
+                  type="small"
+                  numberOfLines={1}
+                  style={styles.recentChannelName}
+                >
                   {channel.name}
                 </ThemedText>
-                <ThemedText type="caption" numberOfLines={1} style={styles.recentChannelGroup}>
+                <ThemedText
+                  type="caption"
+                  numberOfLines={1}
+                  style={styles.recentChannelGroup}
+                >
                   {channel.group}
                 </ThemedText>
               </View>
@@ -925,8 +1152,16 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         </ScrollView>
       </Animated.View>
 
-      <Modal visible={showSettingsModal} transparent animationType="fade" onRequestClose={() => setShowSettingsModal(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setShowSettingsModal(false)}>
+      <Modal
+        visible={showSettingsModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSettingsModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowSettingsModal(false)}
+        >
           <View style={styles.settingsModalContent}>
             <ThemedText type="h4" style={styles.modalTitle}>
               Settings
@@ -951,7 +1186,11 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 <ThemedText type="small" style={styles.settingsMenuItemValue}>
                   {getQualityLabel()}
                 </ThemedText>
-                <Ionicons name="chevron-forward" size={16} color={Colors.dark.textSecondary} />
+                <Ionicons
+                  name="chevron-forward"
+                  size={16}
+                  color={Colors.dark.textSecondary}
+                />
               </View>
             </TVFocusablePressable>
 
@@ -974,7 +1213,11 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 <ThemedText type="small" style={styles.settingsMenuItemValue}>
                   {getZoomLabel()}
                 </ThemedText>
-                <Ionicons name="chevron-forward" size={16} color={Colors.dark.textSecondary} />
+                <Ionicons
+                  name="chevron-forward"
+                  size={16}
+                  color={Colors.dark.textSecondary}
+                />
               </View>
             </TVFocusablePressable>
 
@@ -988,16 +1231,25 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
               accessibilityLabel="Audio Track"
             >
               <View style={styles.settingsMenuItemLeft}>
-                <Ionicons name="volume-high-outline" size={20} color="#FFFFFF" />
+                <Ionicons
+                  name="volume-high-outline"
+                  size={20}
+                  color="#FFFFFF"
+                />
                 <ThemedText type="body" style={styles.settingsMenuItemLabel}>
                   Audio Track
                 </ThemedText>
               </View>
               <View style={styles.settingsMenuItemRight}>
                 <ThemedText type="small" style={styles.settingsMenuItemValue}>
-                  {audioTracks.find((t) => t.id === selectedAudioTrack)?.label || "Default"}
+                  {audioTracks.find((t) => t.id === selectedAudioTrack)
+                    ?.label || "Default"}
                 </ThemedText>
-                <Ionicons name="chevron-forward" size={16} color={Colors.dark.textSecondary} />
+                <Ionicons
+                  name="chevron-forward"
+                  size={16}
+                  color={Colors.dark.textSecondary}
+                />
               </View>
             </TVFocusablePressable>
 
@@ -1019,18 +1271,31 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
               <View style={styles.settingsMenuItemRight}>
                 <ThemedText type="small" style={styles.settingsMenuItemValue}>
                   {subtitlesEnabled
-                    ? subtitleTracks.find((t) => t.id === selectedSubtitleTrack)?.label || "On"
+                    ? subtitleTracks.find((t) => t.id === selectedSubtitleTrack)
+                        ?.label || "On"
                     : "Off"}
                 </ThemedText>
-                <Ionicons name="chevron-forward" size={16} color={Colors.dark.textSecondary} />
+                <Ionicons
+                  name="chevron-forward"
+                  size={16}
+                  color={Colors.dark.textSecondary}
+                />
               </View>
             </TVFocusablePressable>
           </View>
         </Pressable>
       </Modal>
 
-      <Modal visible={showQualityModal} transparent animationType="fade" onRequestClose={() => setShowQualityModal(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setShowQualityModal(false)}>
+      <Modal
+        visible={showQualityModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowQualityModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowQualityModal(false)}
+        >
           <View style={styles.modalContent}>
             <ThemedText type="h4" style={styles.modalTitle}>
               Video Quality
@@ -1046,11 +1311,20 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
             >
               <View>
                 <ThemedText type="body">Auto</ThemedText>
-                <ThemedText type="caption" style={{ color: Colors.dark.textSecondary }}>
+                <ThemedText
+                  type="caption"
+                  style={{ color: Colors.dark.textSecondary }}
+                >
                   Adjusts to your network
                 </ThemedText>
               </View>
-              {selectedQuality === "auto" ? <Ionicons name="checkmark" size={20} color={Colors.dark.primary} /> : null}
+              {selectedQuality === "auto" ? (
+                <Ionicons
+                  name="checkmark"
+                  size={20}
+                  color={Colors.dark.primary}
+                />
+              ) : null}
             </TVFocusablePressable>
             {qualities.map((quality) => (
               <TVFocusablePressable
@@ -1066,22 +1340,39 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 <View>
                   <ThemedText type="body">{quality.resolution}</ThemedText>
                   {quality.bitrate ? (
-                    <ThemedText type="caption" style={{ color: Colors.dark.textSecondary }}>
+                    <ThemedText
+                      type="caption"
+                      style={{ color: Colors.dark.textSecondary }}
+                    >
                       {quality.bitrate >= 1000000
                         ? `${(quality.bitrate / 1000000).toFixed(1)} Mbps`
                         : `${Math.round(quality.bitrate / 1000)} kbps`}
                     </ThemedText>
                   ) : null}
                 </View>
-                {selectedQuality === quality.label ? <Ionicons name="checkmark" size={20} color={Colors.dark.primary} /> : null}
+                {selectedQuality === quality.label ? (
+                  <Ionicons
+                    name="checkmark"
+                    size={20}
+                    color={Colors.dark.primary}
+                  />
+                ) : null}
               </TVFocusablePressable>
             ))}
           </View>
         </Pressable>
       </Modal>
 
-      <Modal visible={showZoomModal} transparent animationType="fade" onRequestClose={() => setShowZoomModal(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setShowZoomModal(false)}>
+      <Modal
+        visible={showZoomModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowZoomModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowZoomModal(false)}
+        >
           <View style={styles.modalContent}>
             <ThemedText type="h4" style={styles.modalTitle}>
               Aspect Ratio
@@ -1098,23 +1389,45 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 accessibilityLabel={option.label}
               >
                 <View style={styles.zoomOptionContent}>
-                  <Ionicons name={option.icon as any} size={20} color="#FFFFFF" style={{ marginRight: 12 }} />
+                  <Ionicons
+                    name={option.icon as any}
+                    size={20}
+                    color="#FFFFFF"
+                    style={{ marginRight: 12 }}
+                  />
                   <View>
                     <ThemedText type="body">{option.label}</ThemedText>
-                    <ThemedText type="caption" style={{ color: Colors.dark.textSecondary }}>
+                    <ThemedText
+                      type="caption"
+                      style={{ color: Colors.dark.textSecondary }}
+                    >
                       {option.description}
                     </ThemedText>
                   </View>
                 </View>
-                {contentFit === option.value ? <Ionicons name="checkmark" size={20} color={Colors.dark.primary} /> : null}
+                {contentFit === option.value ? (
+                  <Ionicons
+                    name="checkmark"
+                    size={20}
+                    color={Colors.dark.primary}
+                  />
+                ) : null}
               </TVFocusablePressable>
             ))}
           </View>
         </Pressable>
       </Modal>
 
-      <Modal visible={showAudioModal} transparent animationType="fade" onRequestClose={() => setShowAudioModal(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setShowAudioModal(false)}>
+      <Modal
+        visible={showAudioModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAudioModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowAudioModal(false)}
+        >
           <View style={styles.modalContent}>
             <ThemedText type="h4" style={styles.modalTitle}>
               Audio Track
@@ -1133,16 +1446,29 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 >
                   <View>
                     <ThemedText type="body">{track.label}</ThemedText>
-                    <ThemedText type="caption" style={{ color: Colors.dark.textSecondary }}>
+                    <ThemedText
+                      type="caption"
+                      style={{ color: Colors.dark.textSecondary }}
+                    >
                       {track.language}
                     </ThemedText>
                   </View>
-                  {selectedAudioTrack === track.id ? <Ionicons name="checkmark" size={20} color={Colors.dark.primary} /> : null}
+                  {selectedAudioTrack === track.id ? (
+                    <Ionicons
+                      name="checkmark"
+                      size={20}
+                      color={Colors.dark.primary}
+                    />
+                  ) : null}
                 </TVFocusablePressable>
               ))
             ) : (
               <View style={styles.emptyState}>
-                <Ionicons name="volume-mute-outline" size={32} color={Colors.dark.textSecondary} />
+                <Ionicons
+                  name="volume-mute-outline"
+                  size={32}
+                  color={Colors.dark.textSecondary}
+                />
                 <ThemedText type="body" style={styles.emptyStateText}>
                   No additional audio tracks
                 </ThemedText>
@@ -1152,8 +1478,16 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         </Pressable>
       </Modal>
 
-      <Modal visible={showSubtitleModal} transparent animationType="fade" onRequestClose={() => setShowSubtitleModal(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setShowSubtitleModal(false)}>
+      <Modal
+        visible={showSubtitleModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSubtitleModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowSubtitleModal(false)}
+        >
           <View style={styles.modalContent}>
             <ThemedText type="h4" style={styles.modalTitle}>
               Subtitles
@@ -1168,7 +1502,13 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
               accessibilityLabel="Subtitles off"
             >
               <ThemedText type="body">Off</ThemedText>
-              {!subtitlesEnabled ? <Ionicons name="checkmark" size={20} color={Colors.dark.primary} /> : null}
+              {!subtitlesEnabled ? (
+                <Ionicons
+                  name="checkmark"
+                  size={20}
+                  color={Colors.dark.primary}
+                />
+              ) : null}
             </TVFocusablePressable>
             {subtitleTracks.length > 0 ? (
               subtitleTracks.map((track) => (
@@ -1177,23 +1517,37 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                   onPress={() => handleSubtitleTrackSelect(track.id)}
                   baseStyle={[
                     styles.modalOption,
-                    selectedSubtitleTrack === track.id && styles.modalOptionActive,
+                    selectedSubtitleTrack === track.id &&
+                      styles.modalOptionActive,
                   ]}
                   focusedStyle={styles.modalOptionFocused}
                   accessibilityLabel={track.label}
                 >
                   <View>
                     <ThemedText type="body">{track.label}</ThemedText>
-                    <ThemedText type="caption" style={{ color: Colors.dark.textSecondary }}>
+                    <ThemedText
+                      type="caption"
+                      style={{ color: Colors.dark.textSecondary }}
+                    >
                       {track.language}
                     </ThemedText>
                   </View>
-                  {selectedSubtitleTrack === track.id ? <Ionicons name="checkmark" size={20} color={Colors.dark.primary} /> : null}
+                  {selectedSubtitleTrack === track.id ? (
+                    <Ionicons
+                      name="checkmark"
+                      size={20}
+                      color={Colors.dark.primary}
+                    />
+                  ) : null}
                 </TVFocusablePressable>
               ))
             ) : (
               <View style={styles.emptyState}>
-                <Ionicons name="text-outline" size={32} color={Colors.dark.textSecondary} />
+                <Ionicons
+                  name="text-outline"
+                  size={32}
+                  color={Colors.dark.textSecondary}
+                />
                 <ThemedText type="body" style={styles.emptyStateText}>
                   No subtitles available
                 </ThemedText>
@@ -1339,8 +1693,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.3)",
     transform: [{ scale: 1.1 }],
   },
-  bottomControls: {
-  },
+  bottomControls: {},
   progressContainer: {
     flexDirection: "row",
     alignItems: "center",
