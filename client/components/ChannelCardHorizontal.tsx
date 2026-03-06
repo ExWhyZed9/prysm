@@ -2,6 +2,7 @@ import React, { useState, useCallback } from "react";
 import { StyleSheet, View, Pressable, Platform, ViewStyle } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
+import { useRecyclingState } from "@shopify/flash-list";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
@@ -48,7 +49,10 @@ function ChannelCardHorizontalInner({
 }: ChannelCardHorizontalProps) {
   const textStyles = getTextStyles(textSize);
   const [isFocused, setIsFocused] = useState(false);
-  const [logoError, setLogoError] = useState(false);
+  // useRecyclingState resets logoError automatically when this cell is recycled
+  // to show a different channel, preventing the previous channel's error state
+  // from carrying over to the new channel
+  const [logoError, setLogoError] = useRecyclingState(false, [channel.id]);
   const [isFavFocused, setIsFavFocused] = useState(false);
 
   const handlePress = useCallback(() => {
@@ -60,7 +64,7 @@ function ChannelCardHorizontalInner({
       e.stopPropagation();
       onFavoritePress();
     },
-    [onFavoritePress]
+    [onFavoritePress],
   );
 
   const handleFocus = useCallback(() => setIsFocused(true), []);
@@ -110,10 +114,12 @@ function ChannelCardHorizontalInner({
           onPress={handleFavorite}
           onFocus={() => setIsFavFocused(true)}
           onBlur={() => setIsFavFocused(false)}
-          style={[
-            styles.favoriteButton,
-            isFavFocused && styles.favoriteButtonFocused,
-          ] as ViewStyle[]}
+          style={
+            [
+              styles.favoriteButton,
+              isFavFocused && styles.favoriteButtonFocused,
+            ] as ViewStyle[]
+          }
           hitSlop={8}
           focusable={true}
           accessibilityLabel={
@@ -125,9 +131,7 @@ function ChannelCardHorizontalInner({
           <Ionicons
             name={isFavorite ? "star" : "star-outline"}
             size={isUltraWide ? 14 : 16}
-            color={
-              isFavorite ? Colors.dark.primary : "rgba(255,255,255,0.5)"
-            }
+            color={isFavorite ? Colors.dark.primary : "rgba(255,255,255,0.5)"}
           />
         </Pressable>
       </View>
@@ -146,9 +150,7 @@ function ChannelCardHorizontalInner({
           {channel.name}
         </ThemedText>
         <View style={styles.liveIndicator}>
-          <View
-            style={[styles.liveDot, isCompact && styles.liveDotCompact]}
-          />
+          <View style={[styles.liveDot, isCompact && styles.liveDotCompact]} />
           <ThemedText
             type="caption"
             style={[
@@ -175,7 +177,7 @@ export const ChannelCardHorizontal = React.memo(
     prev.textSize === next.textSize &&
     prev.themeBackground === next.themeBackground &&
     prev.onPress === next.onPress &&
-    prev.onFavoritePress === next.onFavoritePress
+    prev.onFavoritePress === next.onFavoritePress,
 );
 
 const styles = StyleSheet.create({

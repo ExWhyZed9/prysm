@@ -1,4 +1,10 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import React, {
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
 import {
   StyleSheet,
   View,
@@ -40,7 +46,15 @@ const emptyChannelsImage = require("../../assets/images/empty-channels.png");
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-function FocusableCategoryItem({ cat, isSelected, isFav, count, onPress, onFavoritePress, theme }: {
+function FocusableCategoryItem({
+  cat,
+  isSelected,
+  isFav,
+  count,
+  onPress,
+  onFavoritePress,
+  theme,
+}: {
   cat: string;
   isSelected: boolean;
   isFav: boolean;
@@ -58,20 +72,22 @@ function FocusableCategoryItem({ cat, isSelected, isFav, count, onPress, onFavor
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
       focusable={true}
-      style={[
-        styles.categoryItem,
-        {
-          backgroundColor: isSelected
-            ? Colors.dark.primary + "20"
-            : "transparent",
-        },
-        isFocused && {
-          borderWidth: 2,
-          borderColor: Colors.dark.primary,
-          backgroundColor: Colors.dark.primary + "30",
-          transform: [{ scale: 1.02 }],
-        },
-      ] as ViewStyle[]}
+      style={
+        [
+          styles.categoryItem,
+          {
+            backgroundColor: isSelected
+              ? Colors.dark.primary + "20"
+              : "transparent",
+          },
+          isFocused && {
+            borderWidth: 2,
+            borderColor: Colors.dark.primary,
+            backgroundColor: Colors.dark.primary + "30",
+            transform: [{ scale: 1.02 }],
+          },
+        ] as ViewStyle[]
+      }
       testID={`category-${cat}`}
     >
       <View style={styles.categoryItemLeft}>
@@ -98,7 +114,9 @@ function FocusableCategoryItem({ cat, isSelected, isFav, count, onPress, onFavor
       <View style={styles.categoryItemRight}>
         <ThemedText
           type="small"
-          style={{ color: isFocused ? Colors.dark.primary : theme.textSecondary }}
+          style={{
+            color: isFocused ? Colors.dark.primary : theme.textSecondary,
+          }}
         >
           {count}
         </ThemedText>
@@ -107,13 +125,17 @@ function FocusableCategoryItem({ cat, isSelected, isFav, count, onPress, onFavor
             onPress={(e) => onFavoritePress(cat, e)}
             onFocus={() => setIsFavFocused(true)}
             onBlur={() => setIsFavFocused(false)}
-            style={[
-              styles.categoryFavButton,
-              isFavFocused && styles.categoryFavButtonFocused,
-            ] as ViewStyle[]}
+            style={
+              [
+                styles.categoryFavButton,
+                isFavFocused && styles.categoryFavButtonFocused,
+              ] as ViewStyle[]
+            }
             hitSlop={8}
             focusable={true}
-            accessibilityLabel={isFav ? `Remove ${cat} from favorites` : `Add ${cat} to favorites`}
+            accessibilityLabel={
+              isFav ? `Remove ${cat} from favorites` : `Add ${cat} to favorites`
+            }
             accessibilityRole="button"
           >
             <Ionicons
@@ -128,7 +150,13 @@ function FocusableCategoryItem({ cat, isSelected, isFav, count, onPress, onFavor
   );
 }
 
-function FocusableMenuButton({ onPress, theme }: { onPress: () => void; theme: any }) {
+function FocusableMenuButton({
+  onPress,
+  theme,
+}: {
+  onPress: () => void;
+  theme: any;
+}) {
   const [isFocused, setIsFocused] = useState(false);
   return (
     <Pressable
@@ -136,19 +164,35 @@ function FocusableMenuButton({ onPress, theme }: { onPress: () => void; theme: a
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
       focusable={true}
-      style={[
-        styles.menuButton,
-        { backgroundColor: theme.backgroundSecondary },
-        isFocused && { borderWidth: 2, borderColor: Colors.dark.primary, backgroundColor: Colors.dark.primary + "30" },
-      ] as ViewStyle[]}
+      style={
+        [
+          styles.menuButton,
+          { backgroundColor: theme.backgroundSecondary },
+          isFocused && {
+            borderWidth: 2,
+            borderColor: Colors.dark.primary,
+            backgroundColor: Colors.dark.primary + "30",
+          },
+        ] as ViewStyle[]
+      }
       testID="menu-button"
     >
-      <Ionicons name="menu" size={22} color={isFocused ? "#FFFFFF" : theme.text} />
+      <Ionicons
+        name="menu"
+        size={22}
+        color={isFocused ? "#FFFFFF" : theme.text}
+      />
     </Pressable>
   );
 }
 
-function FocusableCloseButton({ onPress, theme }: { onPress: () => void; theme: any }) {
+function FocusableCloseButton({
+  onPress,
+  theme,
+}: {
+  onPress: () => void;
+  theme: any;
+}) {
   const [isFocused, setIsFocused] = useState(false);
   return (
     <Pressable
@@ -158,21 +202,40 @@ function FocusableCloseButton({ onPress, theme }: { onPress: () => void; theme: 
       focusable={true}
       accessibilityLabel="Close categories"
       accessibilityRole="button"
-      style={[
-        styles.closeButton,
-        isFocused && styles.closeButtonFocused,
-      ] as ViewStyle[]}
+      style={
+        [
+          styles.closeButton,
+          isFocused && styles.closeButtonFocused,
+        ] as ViewStyle[]
+      }
     >
-      <Ionicons name="close" size={24} color={isFocused ? "#FFFFFF" : theme.text} />
+      <Ionicons
+        name="close"
+        size={24}
+        color={isFocused ? "#FFFFFF" : theme.text}
+      />
     </Pressable>
   );
 }
 
 const DRAWER_WIDTH = 280;
 const DOUBLE_PRESS_DELAY = 300;
+// Extra rows pre-rendered beyond the visible viewport on TV for smooth D-pad scrolling
+const TV_DRAW_DISTANCE = 1200;
+const MOBILE_DRAW_DISTANCE = 300;
 
 const ItemSeparator = () => <View style={{ height: Spacing.sm }} />;
 const keyExtractor = (item: Channel) => item.id;
+
+/** Estimated total card height: logo area + info section + separator */
+function getEstimatedCardHeight(
+  cardWidth: number,
+  isUltraWide: boolean,
+): number {
+  const logoHeight = isUltraWide ? cardWidth * 0.5 : cardWidth * 0.55;
+  const infoHeight = 56; // name (2 lines ~28px) + live row (~12px) + padding (~16px)
+  return Math.ceil(logoHeight + infoHeight + Spacing.sm); // Spacing.sm = separator
+}
 
 export default function ChannelsScreen() {
   const insets = useSafeAreaInsets();
@@ -194,8 +257,13 @@ export default function ChannelsScreen() {
     updateSettings,
   } = usePlaylist();
 
-  const initialCategory = settings.rememberLastCategory ? settings.lastCategory : "All";
+  const initialCategory = settings.rememberLastCategory
+    ? settings.lastCategory
+    : "All";
   const [searchQuery, setSearchQuery] = useState("");
+  // Debounced query — filteredChannels recomputes only after 200ms of no typing
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -228,11 +296,21 @@ export default function ChannelsScreen() {
     return counts;
   }, [playlist]);
 
+  useEffect(() => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 200);
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, [searchQuery]);
+
   const filteredChannels = useMemo(() => {
     if (!playlist) return [];
 
-    if (searchQuery.trim()) {
-      return searchChannels(searchQuery);
+    if (debouncedSearchQuery.trim()) {
+      return searchChannels(debouncedSearchQuery);
     }
 
     if (selectedCategory !== "All") {
@@ -240,7 +318,7 @@ export default function ChannelsScreen() {
     }
 
     return playlist.channels;
-  }, [playlist, searchQuery, selectedCategory, searchChannels]);
+  }, [playlist, debouncedSearchQuery, selectedCategory, searchChannels]);
 
   const openDrawer = useCallback(() => {
     setDrawerOpen(true);
@@ -269,7 +347,7 @@ export default function ChannelsScreen() {
     if (!isTV) return;
 
     let tvEventHandler: any = null;
-    
+
     try {
       const RN = require("react-native");
       const TVHandler = RN.TVEventHandler;
@@ -294,14 +372,17 @@ export default function ChannelsScreen() {
     };
   }, [handleLeftPress]);
 
-  const handleCategoryChange = useCallback((category: string) => {
-    setSelectedCategory(category);
-    setSearchQuery("");
-    closeDrawer();
-    if (settings.rememberLastCategory) {
-      updateSettings({ lastCategory: category });
-    }
-  }, [closeDrawer, settings.rememberLastCategory, updateSettings]);
+  const handleCategoryChange = useCallback(
+    (category: string) => {
+      setSelectedCategory(category);
+      setSearchQuery("");
+      closeDrawer();
+      if (settings.rememberLastCategory) {
+        updateSettings({ lastCategory: category });
+      }
+    },
+    [closeDrawer, settings.rememberLastCategory, updateSettings],
+  );
 
   const handleSearchChange = useCallback((query: string) => {
     setSearchQuery(query);
@@ -313,7 +394,7 @@ export default function ChannelsScreen() {
       await toggleFavoriteCategory(category);
       if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     },
-    [toggleFavoriteCategory]
+    [toggleFavoriteCategory],
   );
 
   const animatedDrawerStyle = useAnimatedStyle(() => ({
@@ -338,7 +419,7 @@ export default function ChannelsScreen() {
       }
       return handler;
     },
-    [navigation, channelPressHandlers]
+    [navigation, channelPressHandlers],
   );
 
   const getFavoritePressHandler = useCallback(
@@ -350,7 +431,7 @@ export default function ChannelsScreen() {
       }
       return handler;
     },
-    [toggleFavorite, favoritePressHandlers]
+    [toggleFavorite, favoritePressHandlers],
   );
 
   const renderChannel = useCallback(
@@ -367,26 +448,49 @@ export default function ChannelsScreen() {
         themeTextSecondary={theme.textSecondary}
       />
     ),
-    [favoritesSet, getChannelPressHandler, getFavoritePressHandler, cardWidth, isUltraWide, settings.textSize, theme.backgroundDefault, theme.textSecondary]
+    [
+      favoritesSet,
+      getChannelPressHandler,
+      getFavoritePressHandler,
+      cardWidth,
+      isUltraWide,
+      settings.textSize,
+      theme.backgroundDefault,
+      theme.textSecondary,
+    ],
   );
 
   const ListHeader = useMemo(() => {
-    const currentCategory = selectedCategory !== "All" ? selectedCategory : 
-      (searchQuery.trim() ? "Search Results" : "All Channels");
-    const isCatFavorite = selectedCategory !== "All" && isCategoryFavorite(selectedCategory);
-    
+    const currentCategory =
+      selectedCategory !== "All"
+        ? selectedCategory
+        : searchQuery.trim()
+          ? "Search Results"
+          : "All Channels";
+    const isCatFavorite =
+      selectedCategory !== "All" && isCategoryFavorite(selectedCategory);
+
     return (
       <View style={styles.listHeader}>
         <View style={styles.categoryHeader}>
           <View style={styles.categoryTitleRow}>
             {isCatFavorite ? (
               <View style={styles.favoriteCategoryIcon}>
-                <ThemedText type="caption" style={{ color: Colors.dark.primary }}>
+                <ThemedText
+                  type="caption"
+                  style={{ color: Colors.dark.primary }}
+                >
                   ★
                 </ThemedText>
               </View>
             ) : null}
-            <ThemedText type="h4" style={[styles.categoryTitle, isUltraWide && styles.categoryTitleCompact]}>
+            <ThemedText
+              type="h4"
+              style={[
+                styles.categoryTitle,
+                isUltraWide && styles.categoryTitleCompact,
+              ]}
+            >
               {currentCategory}
             </ThemedText>
           </View>
@@ -399,19 +503,33 @@ export default function ChannelsScreen() {
         </View>
       </View>
     );
-  }, [selectedCategory, searchQuery, isCategoryFavorite, isUltraWide, filteredChannels.length, theme]);
+  }, [
+    selectedCategory,
+    searchQuery,
+    isCategoryFavorite,
+    isUltraWide,
+    filteredChannels.length,
+    theme,
+  ]);
 
-  const ListEmpty = useMemo(() => (
-    <View style={styles.emptyContainer}>
-      <EmptyState
-        image={emptyChannelsImage}
-        title="No Results"
-        description={searchQuery ? `No channels found for "${searchQuery}"` : "No channels in this category"}
-        actionLabel={searchQuery ? "Clear Search" : undefined}
-        onAction={searchQuery ? () => handleSearchChange("") : undefined}
-      />
-    </View>
-  ), [searchQuery, handleSearchChange]);
+  const ListEmpty = useMemo(
+    () => (
+      <View style={styles.emptyContainer}>
+        <EmptyState
+          image={emptyChannelsImage}
+          title="No Results"
+          description={
+            searchQuery
+              ? `No channels found for "${searchQuery}"`
+              : "No channels in this category"
+          }
+          actionLabel={searchQuery ? "Clear Search" : undefined}
+          onAction={searchQuery ? () => handleSearchChange("") : undefined}
+        />
+      </View>
+    ),
+    [searchQuery, handleSearchChange],
+  );
 
   if (isLoading) {
     return (
@@ -452,7 +570,12 @@ export default function ChannelsScreen() {
       >
         <View style={styles.headerRow}>
           <FocusableMenuButton onPress={openDrawer} theme={theme} />
-          <View style={[styles.searchContainer, isUltraWide && styles.searchContainerCompact]}>
+          <View
+            style={[
+              styles.searchContainer,
+              isUltraWide && styles.searchContainerCompact,
+            ]}
+          >
             <SearchBar
               value={searchQuery}
               onChangeText={handleSearchChange}
@@ -461,7 +584,11 @@ export default function ChannelsScreen() {
           </View>
         </View>
         <View style={styles.selectedCategoryRow}>
-          <ThemedText type="body" numberOfLines={1} style={[styles.selectedCategoryText, { fontWeight: "600" }]}>
+          <ThemedText
+            type="body"
+            numberOfLines={1}
+            style={[styles.selectedCategoryText, { fontWeight: "600" }]}
+          >
             {selectedCategory}
           </ThemedText>
           <ThemedText type="small" style={{ color: theme.textSecondary }}>
@@ -480,7 +607,8 @@ export default function ChannelsScreen() {
           ListHeaderComponent={ListHeader}
           ListHeaderComponentStyle={styles.listHeaderWrapper}
           ListEmptyComponent={ListEmpty}
-          drawDistance={300}
+          drawDistance={isTV ? TV_DRAW_DISTANCE : MOBILE_DRAW_DISTANCE}
+          maxItemsInRecyclePool={isTV ? gridColumns * 12 : gridColumns * 8}
           contentContainerStyle={{
             paddingBottom: insets.bottom + Spacing.md,
             paddingHorizontal: Spacing.xs,
@@ -501,7 +629,7 @@ export default function ChannelsScreen() {
           <Animated.View style={[styles.backdrop, animatedBackdropStyle]}>
             <Pressable style={StyleSheet.absoluteFill} onPress={closeDrawer} />
           </Animated.View>
-          
+
           <Animated.View
             style={[
               styles.drawer,
@@ -517,14 +645,14 @@ export default function ChannelsScreen() {
               <ThemedText type="h4">Categories</ThemedText>
               <FocusableCloseButton onPress={closeDrawer} theme={theme} />
             </View>
-            
+
             <FlashList
               data={categories}
               renderItem={({ item: cat }) => {
                 const isSelected = selectedCategory === cat;
                 const isFav = isCategoryFavorite(cat);
                 const count = categoryChannelCounts[cat] || 0;
-                
+
                 return (
                   <FocusableCategoryItem
                     cat={cat}
@@ -538,7 +666,6 @@ export default function ChannelsScreen() {
                 );
               }}
               keyExtractor={(item) => item}
-              estimatedItemSize={56}
               contentContainerStyle={{
                 paddingTop: Spacing.sm,
               }}
