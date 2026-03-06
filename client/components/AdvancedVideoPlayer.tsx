@@ -161,6 +161,7 @@ const CONTENT_FIT_OPTIONS: {
 ];
 
 const CONTROLS_TIMEOUT = 5000;
+const TV_CONTROLS_TIMEOUT = 8000;
 const SEEK_SECONDS = 10;
 
 const placeholderImage = require("../../assets/images/placeholder-channel.png");
@@ -385,20 +386,22 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     if (controlsTimeoutRef.current) {
       clearTimeout(controlsTimeoutRef.current);
     }
-    if (isTV) return;
-    controlsTimeoutRef.current = setTimeout(() => {
-      if (
-        isPlaying &&
-        !showSettingsModal &&
-        !showQualityModal &&
-        !showZoomModal &&
-        !showAudioModal &&
-        !showSubtitleModal
-      ) {
-        setShowControls(false);
-        setShowRecentChannels(false);
-      }
-    }, CONTROLS_TIMEOUT);
+    controlsTimeoutRef.current = setTimeout(
+      () => {
+        if (
+          isPlaying &&
+          !showSettingsModal &&
+          !showQualityModal &&
+          !showZoomModal &&
+          !showAudioModal &&
+          !showSubtitleModal
+        ) {
+          setShowControls(false);
+          setShowRecentChannels(false);
+        }
+      },
+      isTV ? TV_CONTROLS_TIMEOUT : CONTROLS_TIMEOUT,
+    );
   };
 
   const resetControlsTimeout = useCallback(() => {
@@ -580,33 +583,22 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
           const { eventType } = evt;
           const controlsVisible = showControlsRef.current;
           if (eventType === "select" || eventType === "playPause") {
+            // Toggle controls visibility so user can show/hide with OK/select
+            setShowControls(!controlsVisible);
             if (!controlsVisible) {
-              setShowControls(true);
-              resetControlsTimeoutRef.current();
-            } else {
               resetControlsTimeoutRef.current();
             }
-          } else if (eventType === "up" || eventType === "down") {
+          } else if (
+            eventType === "up" ||
+            eventType === "down" ||
+            eventType === "left" ||
+            eventType === "right"
+          ) {
+            // Any D-pad direction reveals controls and resets the hide timer
             if (!controlsVisible) {
               setShowControls(true);
-              resetControlsTimeoutRef.current();
-            } else {
-              resetControlsTimeoutRef.current();
             }
-          } else if (eventType === "left") {
-            if (!controlsVisible) {
-              setShowControls(true);
-              resetControlsTimeoutRef.current();
-            } else {
-              resetControlsTimeoutRef.current();
-            }
-          } else if (eventType === "right") {
-            if (!controlsVisible) {
-              setShowControls(true);
-              resetControlsTimeoutRef.current();
-            } else {
-              resetControlsTimeoutRef.current();
-            }
+            resetControlsTimeoutRef.current();
           } else if (eventType === "menu" || eventType === "back") {
             if (controlsVisible) {
               setShowControls(false);
@@ -678,7 +670,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
             player={player}
             style={styles.video}
             contentFit={contentFit}
-            nativeControls={isTV ? true : false}
+            nativeControls={false}
             allowsPictureInPicture
           />
 
@@ -789,7 +781,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
       {/* CHANGED: pointerEvents uses "box-none" when visible to allow taps on empty space to pass through */}
       <Animated.View
         style={[styles.controlsOverlay, animatedControlsStyle]}
-        pointerEvents={showControls && !isLocked && !isTV ? "box-none" : "none"}
+        pointerEvents={showControls && !isLocked ? "box-none" : "none"}
       >
         <View
           style={[
@@ -873,19 +865,21 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 />
               </TVFocusablePressable>
             ) : null}
-            <TVFocusablePressable
-              onPress={handleLockToggle}
-              baseStyle={styles.controlButton}
-              focusedStyle={styles.controlButtonFocused}
-              hitSlop={16}
-              accessibilityLabel="Lock controls"
-            >
-              <Ionicons
-                name="lock-open-outline"
-                size={playerControls.icon}
-                color="#FFFFFF"
-              />
-            </TVFocusablePressable>
+            {!isTV ? (
+              <TVFocusablePressable
+                onPress={handleLockToggle}
+                baseStyle={styles.controlButton}
+                focusedStyle={styles.controlButtonFocused}
+                hitSlop={16}
+                accessibilityLabel="Lock controls"
+              >
+                <Ionicons
+                  name="lock-open-outline"
+                  size={playerControls.icon}
+                  color="#FFFFFF"
+                />
+              </TVFocusablePressable>
+            ) : null}
           </View>
         </View>
 
@@ -1069,14 +1063,16 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
               >
                 <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
               </TVFocusablePressable>
-              <TVFocusablePressable
-                onPress={handlePiP}
-                baseStyle={styles.settingsButton}
-                focusedStyle={styles.settingsButtonFocused}
-                accessibilityLabel="Picture in picture"
-              >
-                <Ionicons name="browsers-outline" size={20} color="#FFFFFF" />
-              </TVFocusablePressable>
+              {!isTV ? (
+                <TVFocusablePressable
+                  onPress={handlePiP}
+                  baseStyle={styles.settingsButton}
+                  focusedStyle={styles.settingsButtonFocused}
+                  accessibilityLabel="Picture in picture"
+                >
+                  <Ionicons name="browsers-outline" size={20} color="#FFFFFF" />
+                </TVFocusablePressable>
+              ) : null}
               <TVFocusablePressable
                 onPress={handleAspectRatioCycle}
                 baseStyle={styles.settingsButton}
