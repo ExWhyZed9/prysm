@@ -11,6 +11,7 @@ const STORAGE_KEYS = {
   RECENT: "prysm_recent",
   LAST_PLAYED: "prysm_last_played",
   SETTINGS: "prysm_settings",
+  NETWORK_STREAM: "prysm_network_stream",
 };
 
 const CHUNK_SIZE = 300;
@@ -33,6 +34,54 @@ export interface PlaylistInfo {
 
 export type AutoRefreshInterval = "off" | "5min" | "15min" | "1day";
 export type TextSizeOption = "small" | "medium" | "large";
+export type DrmScheme = "widevine" | "playready" | "clearkey";
+export type UserAgent =
+  | "chrome"
+  | "firefox"
+  | "safari"
+  | "iphone"
+  | "android"
+  | "smarttv"
+  | "custom";
+
+export interface NetworkStreamConfig {
+  url: string;
+  cookie: string;
+  referer: string;
+  origin: string;
+  /** Either a full license URL or a base64/hex raw key */
+  drmLicenseUrl: string;
+  userAgent: UserAgent;
+  customUserAgent: string;
+  drmScheme: DrmScheme;
+}
+
+export const DEFAULT_NETWORK_STREAM: NetworkStreamConfig = {
+  url: "",
+  cookie: "",
+  referer: "",
+  origin: "",
+  drmLicenseUrl: "",
+  userAgent: "chrome",
+  customUserAgent: "",
+  drmScheme: "widevine",
+};
+
+export const USER_AGENT_STRINGS: Record<UserAgent, string> = {
+  chrome:
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  firefox:
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
+  safari:
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+  iphone:
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+  android:
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+  smarttv:
+    "Mozilla/5.0 (SMART-TV; Linux; Tizen 7.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/7.0 TV Safari/538.1",
+  custom: "",
+};
 
 export interface AppSettings {
   autoPlay: boolean;
@@ -109,9 +158,14 @@ export async function getPlaylistList(): Promise<PlaylistInfo[]> {
   }
 }
 
-export async function savePlaylistList(playlists: PlaylistInfo[]): Promise<void> {
+export async function savePlaylistList(
+  playlists: PlaylistInfo[],
+): Promise<void> {
   try {
-    await AsyncStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(playlists));
+    await AsyncStorage.setItem(
+      STORAGE_KEYS.PLAYLISTS,
+      JSON.stringify(playlists),
+    );
   } catch (error) {
     console.error("Error saving playlist list:", error);
   }
@@ -137,7 +191,9 @@ export async function setActivePlaylistId(id: string): Promise<void> {
 export async function clearAllData(): Promise<void> {
   try {
     const allKeys = await AsyncStorage.getAllKeys();
-    const prysmKeys = allKeys.filter(key => key.startsWith("prysm_") || key.startsWith("iptv_"));
+    const prysmKeys = allKeys.filter(
+      (key) => key.startsWith("prysm_") || key.startsWith("iptv_"),
+    );
     if (prysmKeys.length > 0) {
       await AsyncStorage.multiRemove(prysmKeys);
     }
@@ -146,7 +202,11 @@ export async function clearAllData(): Promise<void> {
   }
 }
 
-export async function savePlaylist(playlist: Playlist, type: PlaylistType = "m3u", xtreamCredentials?: PlaylistInfo["xtreamCredentials"]): Promise<void> {
+export async function savePlaylist(
+  playlist: Playlist,
+  type: PlaylistType = "m3u",
+  xtreamCredentials?: PlaylistInfo["xtreamCredentials"],
+): Promise<void> {
   try {
     const channels = playlist.channels;
     const chunkCount = Math.ceil(channels.length / CHUNK_SIZE);
@@ -163,24 +223,33 @@ export async function savePlaylist(playlist: Playlist, type: PlaylistType = "m3u
       chunkCount,
     };
 
-    await AsyncStorage.setItem(`${STORAGE_KEYS.PLAYLIST_META}${playlist.id}`, JSON.stringify(meta));
+    await AsyncStorage.setItem(
+      `${STORAGE_KEYS.PLAYLIST_META}${playlist.id}`,
+      JSON.stringify(meta),
+    );
 
     for (let i = 0; i < chunkCount; i++) {
       const start = i * CHUNK_SIZE;
       const end = Math.min(start + CHUNK_SIZE, channels.length);
       const chunk = channels.slice(start, end).map(minimizeChannel);
-      
+
       try {
         await AsyncStorage.setItem(
           `${STORAGE_KEYS.PLAYLIST_CHUNKS}${playlist.id}_${i}`,
-          JSON.stringify(chunk)
+          JSON.stringify(chunk),
         );
       } catch (chunkError: any) {
-        if (chunkError.message?.includes("disk is full") || chunkError.code === 13) {
+        if (
+          chunkError.message?.includes("disk is full") ||
+          chunkError.code === 13
+        ) {
           console.warn(`Storage full at chunk ${i}, stopping save`);
           meta.chunkCount = i;
           meta.totalChannels = i * CHUNK_SIZE;
-          await AsyncStorage.setItem(`${STORAGE_KEYS.PLAYLIST_META}${playlist.id}`, JSON.stringify(meta));
+          await AsyncStorage.setItem(
+            `${STORAGE_KEYS.PLAYLIST_META}${playlist.id}`,
+            JSON.stringify(meta),
+          );
           break;
         }
         throw chunkError;
@@ -188,7 +257,7 @@ export async function savePlaylist(playlist: Playlist, type: PlaylistType = "m3u
     }
 
     const playlists = await getPlaylistList();
-    const existingIndex = playlists.findIndex(p => p.id === playlist.id);
+    const existingIndex = playlists.findIndex((p) => p.id === playlist.id);
     const playlistInfo: PlaylistInfo = {
       id: playlist.id,
       name: playlist.name,
@@ -206,22 +275,27 @@ export async function savePlaylist(playlist: Playlist, type: PlaylistType = "m3u
     }
     await savePlaylistList(playlists);
     await setActivePlaylistId(playlist.id);
-
   } catch (error: any) {
     console.error("Error saving playlist:", error);
     if (error.message?.includes("disk is full") || error.code === 13) {
-      throw new Error("Device storage is full. Please free up some space or use a smaller playlist.");
+      throw new Error(
+        "Device storage is full. Please free up some space or use a smaller playlist.",
+      );
     }
     throw error;
   }
 }
 
-export async function getPlaylist(playlistId?: string): Promise<Playlist | null> {
+export async function getPlaylist(
+  playlistId?: string,
+): Promise<Playlist | null> {
   try {
-    const id = playlistId || await getActivePlaylistId();
+    const id = playlistId || (await getActivePlaylistId());
     if (!id) return null;
 
-    const metaStr = await AsyncStorage.getItem(`${STORAGE_KEYS.PLAYLIST_META}${id}`);
+    const metaStr = await AsyncStorage.getItem(
+      `${STORAGE_KEYS.PLAYLIST_META}${id}`,
+    );
     if (!metaStr) return null;
 
     const meta: PlaylistMeta = JSON.parse(metaStr);
@@ -229,7 +303,9 @@ export async function getPlaylist(playlistId?: string): Promise<Playlist | null>
 
     for (let i = 0; i < meta.chunkCount; i++) {
       try {
-        const chunkStr = await AsyncStorage.getItem(`${STORAGE_KEYS.PLAYLIST_CHUNKS}${id}_${i}`);
+        const chunkStr = await AsyncStorage.getItem(
+          `${STORAGE_KEYS.PLAYLIST_CHUNKS}${id}_${i}`,
+        );
         if (chunkStr) {
           const chunk: MinimalChannel[] = JSON.parse(chunkStr);
           channels.push(...chunk.map(expandChannel));
@@ -255,7 +331,9 @@ export async function getPlaylist(playlistId?: string): Promise<Playlist | null>
 
 export async function deletePlaylist(playlistId: string): Promise<void> {
   try {
-    const metaStr = await AsyncStorage.getItem(`${STORAGE_KEYS.PLAYLIST_META}${playlistId}`);
+    const metaStr = await AsyncStorage.getItem(
+      `${STORAGE_KEYS.PLAYLIST_META}${playlistId}`,
+    );
     if (metaStr) {
       const meta: PlaylistMeta = JSON.parse(metaStr);
       const keysToRemove = [`${STORAGE_KEYS.PLAYLIST_META}${playlistId}`];
@@ -266,7 +344,7 @@ export async function deletePlaylist(playlistId: string): Promise<void> {
     }
 
     const playlists = await getPlaylistList();
-    const filtered = playlists.filter(p => p.id !== playlistId);
+    const filtered = playlists.filter((p) => p.id !== playlistId);
     await savePlaylistList(filtered);
 
     const activeId = await getActivePlaylistId();
@@ -282,20 +360,29 @@ export async function deletePlaylist(playlistId: string): Promise<void> {
   }
 }
 
-export async function updatePlaylistInfo(playlistId: string, name: string, url?: string): Promise<void> {
+export async function updatePlaylistInfo(
+  playlistId: string,
+  name: string,
+  url?: string,
+): Promise<void> {
   try {
-    const metaStr = await AsyncStorage.getItem(`${STORAGE_KEYS.PLAYLIST_META}${playlistId}`);
+    const metaStr = await AsyncStorage.getItem(
+      `${STORAGE_KEYS.PLAYLIST_META}${playlistId}`,
+    );
     if (metaStr) {
       const meta: PlaylistMeta = JSON.parse(metaStr);
       meta.name = name;
       if (url !== undefined) {
         meta.url = url;
       }
-      await AsyncStorage.setItem(`${STORAGE_KEYS.PLAYLIST_META}${playlistId}`, JSON.stringify(meta));
+      await AsyncStorage.setItem(
+        `${STORAGE_KEYS.PLAYLIST_META}${playlistId}`,
+        JSON.stringify(meta),
+      );
     }
 
     const playlists = await getPlaylistList();
-    const playlistIndex = playlists.findIndex(p => p.id === playlistId);
+    const playlistIndex = playlists.findIndex((p) => p.id === playlistId);
     if (playlistIndex >= 0) {
       playlists[playlistIndex].name = name;
       if (url !== undefined) {
@@ -313,7 +400,9 @@ export async function clearPlaylist(): Promise<void> {
   try {
     const allKeys = await AsyncStorage.getAllKeys();
     const playlistKeys = allKeys.filter(
-      key => key.startsWith(STORAGE_KEYS.PLAYLIST_META) || key.startsWith(STORAGE_KEYS.PLAYLIST_CHUNKS)
+      (key) =>
+        key.startsWith(STORAGE_KEYS.PLAYLIST_META) ||
+        key.startsWith(STORAGE_KEYS.PLAYLIST_CHUNKS),
     );
     if (playlistKeys.length > 0) {
       await AsyncStorage.multiRemove(playlistKeys);
@@ -337,7 +426,10 @@ export async function getFavorites(): Promise<string[]> {
 
 export async function saveFavorites(favorites: string[]): Promise<void> {
   try {
-    await AsyncStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(favorites));
+    await AsyncStorage.setItem(
+      STORAGE_KEYS.FAVORITES,
+      JSON.stringify(favorites),
+    );
   } catch (error) {
     console.error("Error saving favorites:", error);
   }
@@ -380,7 +472,9 @@ export async function addRecentChannel(channelId: string): Promise<void> {
 export async function getSettings(): Promise<AppSettings> {
   try {
     const data = await AsyncStorage.getItem(STORAGE_KEYS.SETTINGS);
-    return data ? { ...DEFAULT_SETTINGS, ...JSON.parse(data) } : DEFAULT_SETTINGS;
+    return data
+      ? { ...DEFAULT_SETTINGS, ...JSON.parse(data) }
+      : DEFAULT_SETTINGS;
   } catch (error) {
     console.error("Error getting settings:", error);
     return DEFAULT_SETTINGS;
@@ -422,15 +516,22 @@ export async function getFavoriteCategories(): Promise<string[]> {
   }
 }
 
-export async function saveFavoriteCategories(categories: string[]): Promise<void> {
+export async function saveFavoriteCategories(
+  categories: string[],
+): Promise<void> {
   try {
-    await AsyncStorage.setItem(STORAGE_KEYS.FAVORITE_CATEGORIES, JSON.stringify(categories));
+    await AsyncStorage.setItem(
+      STORAGE_KEYS.FAVORITE_CATEGORIES,
+      JSON.stringify(categories),
+    );
   } catch (error) {
     console.error("Error saving favorite categories:", error);
   }
 }
 
-export async function toggleFavoriteCategory(category: string): Promise<string[]> {
+export async function toggleFavoriteCategory(
+  category: string,
+): Promise<string[]> {
   const categories = await getFavoriteCategories();
   const index = categories.indexOf(category);
   if (index > -1) {
@@ -440,4 +541,29 @@ export async function toggleFavoriteCategory(category: string): Promise<string[]
   }
   await saveFavoriteCategories(categories);
   return categories;
+}
+
+export async function getNetworkStreamConfig(): Promise<NetworkStreamConfig> {
+  try {
+    const data = await AsyncStorage.getItem(STORAGE_KEYS.NETWORK_STREAM);
+    return data
+      ? { ...DEFAULT_NETWORK_STREAM, ...JSON.parse(data) }
+      : DEFAULT_NETWORK_STREAM;
+  } catch (error) {
+    console.error("Error getting network stream config:", error);
+    return DEFAULT_NETWORK_STREAM;
+  }
+}
+
+export async function saveNetworkStreamConfig(
+  config: NetworkStreamConfig,
+): Promise<void> {
+  try {
+    await AsyncStorage.setItem(
+      STORAGE_KEYS.NETWORK_STREAM,
+      JSON.stringify(config),
+    );
+  } catch (error) {
+    console.error("Error saving network stream config:", error);
+  }
 }

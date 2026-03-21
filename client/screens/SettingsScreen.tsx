@@ -1,5 +1,16 @@
 import React, { useState, useCallback } from "react";
-import { StyleSheet, View, ScrollView, Modal, Pressable, TextInput, useWindowDimensions, Platform, ViewStyle, ActivityIndicator } from "react-native";
+import {
+  StyleSheet,
+  View,
+  ScrollView,
+  Modal,
+  Pressable,
+  TextInput,
+  useWindowDimensions,
+  Platform,
+  ViewStyle,
+  ActivityIndicator,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -18,7 +29,13 @@ import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 type SettingsNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-function FocusableOption({ onPress, isSelected, style, children, accessibilityLabel }: {
+function FocusableOption({
+  onPress,
+  isSelected,
+  style,
+  children,
+  accessibilityLabel,
+}: {
   onPress: () => void;
   isSelected?: boolean;
   style?: ViewStyle;
@@ -34,19 +51,30 @@ function FocusableOption({ onPress, isSelected, style, children, accessibilityLa
       focusable={true}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      style={[
-        styles.modalOption,
-        isSelected ? { backgroundColor: Colors.dark.primary + "20" } : { backgroundColor: "transparent" },
-        style,
-        isFocused && styles.modalOptionFocused,
-      ] as ViewStyle[]}
+      style={
+        [
+          styles.modalOption,
+          isSelected
+            ? { backgroundColor: Colors.dark.primary + "20" }
+            : { backgroundColor: "transparent" },
+          style,
+          isFocused && styles.modalOptionFocused,
+        ] as ViewStyle[]
+      }
     >
       {children}
     </Pressable>
   );
 }
 
-function FocusablePressable({ onPress, baseStyle, focusedStyle, children, hitSlop, accessibilityLabel }: {
+function FocusablePressable({
+  onPress,
+  baseStyle,
+  focusedStyle,
+  children,
+  hitSlop,
+  accessibilityLabel,
+}: {
   onPress: () => void;
   baseStyle: ViewStyle | ViewStyle[];
   focusedStyle: ViewStyle;
@@ -64,10 +92,12 @@ function FocusablePressable({ onPress, baseStyle, focusedStyle, children, hitSlo
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       hitSlop={hitSlop}
-      style={[
-        ...(Array.isArray(baseStyle) ? baseStyle : [baseStyle]),
-        isFocused && focusedStyle,
-      ] as ViewStyle[]}
+      style={
+        [
+          ...(Array.isArray(baseStyle) ? baseStyle : [baseStyle]),
+          isFocused && focusedStyle,
+        ] as ViewStyle[]
+      }
     >
       {children}
     </Pressable>
@@ -151,7 +181,9 @@ export default function SettingsScreen() {
     setShowQualityModal(false);
   };
 
-  const handleAutoRefreshSelect = (value: typeof settings.autoRefreshInterval) => {
+  const handleAutoRefreshSelect = (
+    value: typeof settings.autoRefreshInterval,
+  ) => {
     if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     updateSettings({ autoRefreshInterval: value });
     setShowAutoRefreshModal(false);
@@ -164,7 +196,7 @@ export default function SettingsScreen() {
   };
 
   const getTextSizeLabel = () => {
-    const option = TEXT_SIZE_OPTIONS.find(o => o.value === settings.textSize);
+    const option = TEXT_SIZE_OPTIONS.find((o) => o.value === settings.textSize);
     return option?.label || "Medium";
   };
 
@@ -182,7 +214,8 @@ export default function SettingsScreen() {
 
   const handleDeletePlaylist = async () => {
     if (playlistToDelete) {
-      if (!isTV) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      if (!isTV)
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       await deletePlaylist(playlistToDelete);
       setPlaylistToDelete(null);
       setShowDeletePlaylistModal(false);
@@ -190,7 +223,8 @@ export default function SettingsScreen() {
   };
 
   const handleClearAllData = async () => {
-    if (!isTV) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    if (!isTV)
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     await clearAllData();
     setShowClearAllConfirm(false);
   };
@@ -201,7 +235,7 @@ export default function SettingsScreen() {
   };
 
   const handleEditPlaylist = (playlistId: string) => {
-    const playlistInfo = playlists.find(p => p.id === playlistId);
+    const playlistInfo = playlists.find((p) => p.id === playlistId);
     if (playlistInfo) {
       setPlaylistToEdit(playlistId);
       setEditPlaylistName(playlistInfo.name);
@@ -215,7 +249,11 @@ export default function SettingsScreen() {
     if (playlistToEdit && editPlaylistName.trim()) {
       try {
         if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        await updatePlaylistInfo(playlistToEdit, editPlaylistName.trim(), editPlaylistUrl.trim() || undefined);
+        await updatePlaylistInfo(
+          playlistToEdit,
+          editPlaylistName.trim(),
+          editPlaylistUrl.trim() || undefined,
+        );
         setShowEditPlaylistModal(false);
         setPlaylistToEdit(null);
         setEditPlaylistName("");
@@ -228,14 +266,14 @@ export default function SettingsScreen() {
 
   const getQualityLabel = () => {
     const option = VIDEO_QUALITY_OPTIONS.find(
-      (o) => o.value === settings.videoQuality
+      (o) => o.value === settings.videoQuality,
     );
     return option?.label || "Auto";
   };
 
   const getAutoRefreshLabel = () => {
     const option = AUTO_REFRESH_OPTIONS.find(
-      (o) => o.value === settings.autoRefreshInterval
+      (o) => o.value === settings.autoRefreshInterval,
     );
     return option?.label || "Off";
   };
@@ -245,7 +283,7 @@ export default function SettingsScreen() {
   };
 
   const getActivePlaylistName = () => {
-    const active = playlists.find(p => p.id === activePlaylistId);
+    const active = playlists.find((p) => p.id === activePlaylistId);
     return active?.name || "None";
   };
 
@@ -380,6 +418,22 @@ export default function SettingsScreen() {
               type="small"
               style={[styles.sectionTitle, { color: theme.textSecondary }]}
             >
+              ADVANCED
+            </ThemedText>
+            <View style={styles.section}>
+              <SettingsRow
+                icon="wifi"
+                title="Network Stream"
+                subtitle="Configure DRM, headers, and user agent"
+                onPress={() => navigation.navigate("NetworkStream")}
+                showChevron
+              />
+            </View>
+
+            <ThemedText
+              type="small"
+              style={[styles.sectionTitle, { color: theme.textSecondary }]}
+            >
               STORAGE
             </ThemedText>
             <View style={styles.section}>
@@ -427,7 +481,10 @@ export default function SettingsScreen() {
           onPress={() => setShowQualityModal(false)}
         >
           <View
-            style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.backgroundDefault },
+            ]}
           >
             <ThemedText type="h4" style={styles.modalTitle}>
               Video Quality
@@ -441,11 +498,7 @@ export default function SettingsScreen() {
               >
                 <ThemedText type="body">{option.label}</ThemedText>
                 {settings.videoQuality === option.value ? (
-                  <Ionicons
-                    name="checkmark"
-                    size={20}
-                    color={theme.primary}
-                  />
+                  <Ionicons name="checkmark" size={20} color={theme.primary} />
                 ) : null}
               </FocusableOption>
             ))}
@@ -464,7 +517,10 @@ export default function SettingsScreen() {
           onPress={() => setShowAutoRefreshModal(false)}
         >
           <View
-            style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.backgroundDefault },
+            ]}
           >
             <ThemedText type="h4" style={styles.modalTitle}>
               Auto-Refresh Playlist
@@ -478,11 +534,7 @@ export default function SettingsScreen() {
               >
                 <ThemedText type="body">{option.label}</ThemedText>
                 {settings.autoRefreshInterval === option.value ? (
-                  <Ionicons
-                    name="checkmark"
-                    size={20}
-                    color={theme.primary}
-                  />
+                  <Ionicons name="checkmark" size={20} color={theme.primary} />
                 ) : null}
               </FocusableOption>
             ))}
@@ -501,7 +553,10 @@ export default function SettingsScreen() {
           onPress={() => setShowThemeModal(false)}
         >
           <View
-            style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.backgroundDefault },
+            ]}
           >
             <ThemedText type="h4" style={styles.modalTitle}>
               Theme
@@ -547,7 +602,10 @@ export default function SettingsScreen() {
           onPress={() => setShowTextSizeModal(false)}
         >
           <View
-            style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.backgroundDefault },
+            ]}
           >
             <ThemedText type="h4" style={styles.modalTitle}>
               Text Size
@@ -561,11 +619,7 @@ export default function SettingsScreen() {
               >
                 <ThemedText type="body">{option.label}</ThemedText>
                 {settings.textSize === option.value ? (
-                  <Ionicons
-                    name="checkmark"
-                    size={20}
-                    color={theme.primary}
-                  />
+                  <Ionicons name="checkmark" size={20} color={theme.primary} />
                 ) : null}
               </FocusableOption>
             ))}
@@ -584,13 +638,23 @@ export default function SettingsScreen() {
           onPress={() => setShowPlaylistModal(false)}
         >
           <View
-            style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.backgroundDefault },
+            ]}
           >
             <ThemedText type="h4" style={styles.modalTitle}>
               Playlists
             </ThemedText>
             {playlists.length === 0 ? (
-              <ThemedText type="body" style={{ color: theme.textSecondary, textAlign: "center", padding: Spacing.md }}>
+              <ThemedText
+                type="body"
+                style={{
+                  color: theme.textSecondary,
+                  textAlign: "center",
+                  padding: Spacing.md,
+                }}
+              >
                 No playlists saved
               </ThemedText>
             ) : (
@@ -602,7 +666,10 @@ export default function SettingsScreen() {
                     baseStyle={[
                       styles.playlistItem,
                       {
-                        backgroundColor: p.id === activePlaylistId ? theme.primary + "20" : "transparent",
+                        backgroundColor:
+                          p.id === activePlaylistId
+                            ? theme.primary + "20"
+                            : "transparent",
                       },
                     ]}
                     focusedStyle={styles.modalOptionFocused}
@@ -611,17 +678,30 @@ export default function SettingsScreen() {
                       <Ionicons
                         name="list"
                         size={18}
-                        color={p.id === activePlaylistId ? theme.primary : theme.textSecondary}
+                        color={
+                          p.id === activePlaylistId
+                            ? theme.primary
+                            : theme.textSecondary
+                        }
                       />
                       <View style={styles.playlistText}>
-                        <ThemedText type="body" numberOfLines={1}>{p.name}</ThemedText>
-                        <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                        <ThemedText type="body" numberOfLines={1}>
+                          {p.name}
+                        </ThemedText>
+                        <ThemedText
+                          type="caption"
+                          style={{ color: theme.textSecondary }}
+                        >
                           {p.channelCount} channels
                         </ThemedText>
                       </View>
                     </View>
                     {p.id === activePlaylistId ? (
-                      <Ionicons name="checkmark" size={20} color={theme.primary} />
+                      <Ionicons
+                        name="checkmark"
+                        size={20}
+                        color={theme.primary}
+                      />
                     ) : null}
                   </FocusablePressable>
                   <FocusablePressable
@@ -631,7 +711,11 @@ export default function SettingsScreen() {
                     baseStyle={styles.editButton}
                     focusedStyle={styles.editButtonFocused}
                   >
-                    <Ionicons name="create-outline" size={18} color={theme.primary} />
+                    <Ionicons
+                      name="create-outline"
+                      size={18}
+                      color={theme.primary}
+                    />
                   </FocusablePressable>
                   <FocusablePressable
                     onPress={() => {
@@ -644,7 +728,11 @@ export default function SettingsScreen() {
                     baseStyle={styles.deleteButton}
                     focusedStyle={styles.deleteButtonFocused}
                   >
-                    <Ionicons name="trash-outline" size={18} color={Colors.dark.error} />
+                    <Ionicons
+                      name="trash-outline"
+                      size={18}
+                      color={Colors.dark.error}
+                    />
                   </FocusablePressable>
                 </View>
               ))
@@ -664,7 +752,10 @@ export default function SettingsScreen() {
           onPress={() => setShowDeletePlaylistModal(false)}
         >
           <View
-            style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.backgroundDefault },
+            ]}
           >
             <View style={styles.confirmIcon}>
               <Ionicons name="warning" size={32} color={Colors.dark.error} />
@@ -714,7 +805,10 @@ export default function SettingsScreen() {
           onPress={() => setShowClearAllConfirm(false)}
         >
           <View
-            style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.backgroundDefault },
+            ]}
           >
             <View style={styles.confirmIcon}>
               <Ionicons name="warning" size={32} color={Colors.dark.error} />
@@ -726,7 +820,8 @@ export default function SettingsScreen() {
               type="body"
               style={[styles.confirmText, { color: theme.textSecondary }]}
             >
-              This will remove all app data including playlists, favorites, and settings.
+              This will remove all app data including playlists, favorites, and
+              settings.
             </ThemedText>
             <View style={styles.confirmButtons}>
               <Button
@@ -764,14 +859,20 @@ export default function SettingsScreen() {
           onPress={() => setShowEditPlaylistModal(false)}
         >
           <View
-            style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.backgroundDefault },
+            ]}
             onStartShouldSetResponder={() => true}
           >
             <ThemedText type="h4" style={styles.modalTitle}>
               Edit Playlist
             </ThemedText>
             <View style={styles.editInputContainer}>
-              <ThemedText type="small" style={[styles.editInputLabel, { color: theme.textSecondary }]}>
+              <ThemedText
+                type="small"
+                style={[styles.editInputLabel, { color: theme.textSecondary }]}
+              >
                 Playlist Name
               </ThemedText>
               <TextInput
@@ -785,12 +886,15 @@ export default function SettingsScreen() {
                     color: theme.text,
                     backgroundColor: theme.backgroundSecondary,
                     borderColor: theme.backgroundSecondary,
-                  }
+                  },
                 ]}
               />
             </View>
             <View style={styles.editInputContainer}>
-              <ThemedText type="small" style={[styles.editInputLabel, { color: theme.textSecondary }]}>
+              <ThemedText
+                type="small"
+                style={[styles.editInputLabel, { color: theme.textSecondary }]}
+              >
                 Playlist URL (optional)
               </ThemedText>
               <TextInput
@@ -804,7 +908,7 @@ export default function SettingsScreen() {
                     color: theme.text,
                     backgroundColor: theme.backgroundSecondary,
                     borderColor: theme.backgroundSecondary,
-                  }
+                  },
                 ]}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -846,8 +950,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  content: {
-  },
+  content: {},
   columns: {
     flexDirection: "row",
     gap: Spacing["2xl"],
