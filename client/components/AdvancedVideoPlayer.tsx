@@ -403,7 +403,6 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
 
   const resetControlsTimeout = useCallback(() => {
     startControlsTimeout();
-    resetControlsTimeoutRef.current();
   }, []);
 
   useEffect(() => {
