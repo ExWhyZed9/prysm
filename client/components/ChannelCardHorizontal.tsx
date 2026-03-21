@@ -16,6 +16,7 @@ interface ChannelCardHorizontalProps {
   isFavorite: boolean;
   onPress: () => void;
   onFavoritePress: () => void;
+  onLongPress?: () => void;
   cardWidth: number;
   isUltraWide: boolean;
   textSize: TextSizeOption;
@@ -41,6 +42,7 @@ function ChannelCardHorizontalInner({
   isFavorite,
   onPress,
   onFavoritePress,
+  onLongPress,
   cardWidth,
   isUltraWide,
   textSize,
@@ -58,6 +60,10 @@ function ChannelCardHorizontalInner({
   const handlePress = useCallback(() => {
     onPress();
   }, [onPress]);
+
+  const handleLongPress = useCallback(() => {
+    onLongPress?.();
+  }, [onLongPress]);
 
   const handleFavorite = useCallback(
     (e: any) => {
@@ -78,6 +84,8 @@ function ChannelCardHorizontalInner({
   return (
     <Pressable
       onPress={handlePress}
+      onLongPress={onLongPress ? handleLongPress : undefined}
+      delayLongPress={isTV ? 500 : 400}
       onFocus={handleFocus}
       onBlur={handleBlur}
       focusable={true}
@@ -177,7 +185,8 @@ export const ChannelCardHorizontal = React.memo(
     prev.textSize === next.textSize &&
     prev.themeBackground === next.themeBackground &&
     prev.onPress === next.onPress &&
-    prev.onFavoritePress === next.onFavoritePress,
+    prev.onFavoritePress === next.onFavoritePress &&
+    prev.onLongPress === next.onLongPress,
 );
 
 const styles = StyleSheet.create({

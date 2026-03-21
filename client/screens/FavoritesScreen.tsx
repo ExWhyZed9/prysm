@@ -1,5 +1,12 @@
 import React, { useState, useMemo, useCallback, useRef } from "react";
-import { StyleSheet, View, ActivityIndicator, Pressable, Platform, ViewStyle } from "react-native";
+import {
+  StyleSheet,
+  View,
+  ActivityIndicator,
+  Pressable,
+  Platform,
+  ViewStyle,
+} from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -24,7 +31,13 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 type ViewMode = "channels" | "categories";
 
-function FocusableTab({ onPress, isActive, icon, label, accessibilityLabel }: {
+function FocusableTab({
+  onPress,
+  isActive,
+  icon,
+  label,
+  accessibilityLabel,
+}: {
   onPress: () => void;
   isActive: boolean;
   icon: string;
@@ -40,22 +53,36 @@ function FocusableTab({ onPress, isActive, icon, label, accessibilityLabel }: {
       focusable={true}
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
-      style={[
-        styles.tab,
-        isActive && styles.tabActive,
-        isFocused && styles.tabFocused,
-      ] as ViewStyle[]}
+      style={
+        [
+          styles.tab,
+          isActive && styles.tabActive,
+          isFocused && styles.tabFocused,
+        ] as ViewStyle[]
+      }
     >
       <Ionicons
         name={icon as any}
         size={16}
-        color={isFocused ? "#FFFFFF" : isActive ? Colors.dark.primary : Colors.dark.textSecondary}
+        color={
+          isFocused
+            ? "#FFFFFF"
+            : isActive
+              ? Colors.dark.primary
+              : Colors.dark.textSecondary
+        }
       />
       <ThemedText
         type="small"
         style={[
           styles.tabText,
-          { color: isFocused ? "#FFFFFF" : isActive ? Colors.dark.primary : Colors.dark.textSecondary },
+          {
+            color: isFocused
+              ? "#FFFFFF"
+              : isActive
+                ? Colors.dark.primary
+                : Colors.dark.textSecondary,
+          },
         ]}
       >
         {label}
@@ -96,14 +123,17 @@ export default function FavoritesScreen() {
   }, [getFavoriteChannels]);
 
   const filteredChannels = useMemo(() => {
-    const channels = viewMode === "channels" ? favoriteChannels : getFavoriteCategoryChannels();
+    const channels =
+      viewMode === "channels"
+        ? favoriteChannels
+        : getFavoriteCategoryChannels();
     if (!searchQuery.trim()) return channels;
 
     const lowerQuery = searchQuery.toLowerCase();
     return channels.filter(
       (ch) =>
         ch.name.toLowerCase().includes(lowerQuery) ||
-        ch.group.toLowerCase().includes(lowerQuery)
+        ch.group.toLowerCase().includes(lowerQuery),
     );
   }, [favoriteChannels, getFavoriteCategoryChannels, searchQuery, viewMode]);
 
@@ -117,6 +147,7 @@ export default function FavoritesScreen() {
 
   const channelPressHandlers = useRef(new Map<string, () => void>()).current;
   const favoritePressHandlers = useRef(new Map<string, () => void>()).current;
+  const longPressHandlers = useRef(new Map<string, () => void>()).current;
 
   const getChannelPressHandler = useCallback(
     (channelId: string) => {
@@ -127,7 +158,7 @@ export default function FavoritesScreen() {
       }
       return handler;
     },
-    [navigation, channelPressHandlers]
+    [navigation, channelPressHandlers],
   );
 
   const getFavoritePressHandler = useCallback(
@@ -139,15 +170,32 @@ export default function FavoritesScreen() {
       }
       return handler;
     },
-    [toggleFavorite, favoritePressHandlers]
+    [toggleFavorite, favoritePressHandlers],
+  );
+
+  const getLongPressHandler = useCallback(
+    (channelId: string) => {
+      let handler = longPressHandlers.get(channelId);
+      if (!handler) {
+        handler = () => {
+          toggleFavorite(channelId);
+          if (!Platform.isTV)
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        };
+        longPressHandlers.set(channelId, handler);
+      }
+      return handler;
+    },
+    [toggleFavorite, longPressHandlers],
   );
 
   const handleCategoryUnfavorite = useCallback(
     async (category: string) => {
-      if (!Platform.isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      if (!Platform.isTV)
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       await toggleFavoriteCategory(category);
     },
-    [toggleFavoriteCategory]
+    [toggleFavoriteCategory],
   );
 
   const renderChannelItem = useCallback(
@@ -157,6 +205,7 @@ export default function FavoritesScreen() {
         isFavorite={favoritesSet.has(item.id)}
         onPress={getChannelPressHandler(item.id)}
         onFavoritePress={getFavoritePressHandler(item.id)}
+        onLongPress={getLongPressHandler(item.id)}
         cardWidth={cardWidth}
         isUltraWide={isUltraWide}
         textSize={settings.textSize}
@@ -164,11 +213,22 @@ export default function FavoritesScreen() {
         themeTextSecondary={theme.textSecondary}
       />
     ),
-    [favoritesSet, getChannelPressHandler, getFavoritePressHandler, cardWidth, isUltraWide, settings.textSize, theme.backgroundDefault, theme.textSecondary]
+    [
+      favoritesSet,
+      getChannelPressHandler,
+      getFavoritePressHandler,
+      getLongPressHandler,
+      cardWidth,
+      isUltraWide,
+      settings.textSize,
+      theme.backgroundDefault,
+      theme.textSecondary,
+    ],
   );
 
   const ListHeader = useMemo(() => {
-    const title = viewMode === "channels" ? "Favorite Channels" : "Favorite Categories";
+    const title =
+      viewMode === "channels" ? "Favorite Channels" : "Favorite Categories";
     return (
       <View style={styles.listHeader}>
         <ThemedText type="h4" style={styles.sectionTitle}>
@@ -210,7 +270,11 @@ export default function FavoritesScreen() {
       <View style={styles.emptyContainer}>
         <EmptyState
           image={emptyFavoritesImage}
-          title={viewMode === "channels" ? "No Favorite Channels" : "No Favorite Categories"}
+          title={
+            viewMode === "channels"
+              ? "No Favorite Channels"
+              : "No Favorite Categories"
+          }
           description={
             viewMode === "channels"
               ? "Tap the star icon on any channel to add it to your favorites"
@@ -248,7 +312,12 @@ export default function FavoritesScreen() {
         ]}
       >
         <View style={styles.headerRow}>
-          <View style={[styles.searchContainer, isUltraWide && styles.searchContainerCompact]}>
+          <View
+            style={[
+              styles.searchContainer,
+              isUltraWide && styles.searchContainerCompact,
+            ]}
+          >
             <SearchBar
               value={searchQuery}
               onChangeText={handleSearchChange}

@@ -409,6 +409,7 @@ export default function ChannelsScreen() {
 
   const channelPressHandlers = useRef(new Map<string, () => void>()).current;
   const favoritePressHandlers = useRef(new Map<string, () => void>()).current;
+  const longPressHandlers = useRef(new Map<string, () => void>()).current;
 
   const getChannelPressHandler = useCallback(
     (channelId: string) => {
@@ -434,6 +435,21 @@ export default function ChannelsScreen() {
     [toggleFavorite, favoritePressHandlers],
   );
 
+  const getLongPressHandler = useCallback(
+    (channelId: string) => {
+      let handler = longPressHandlers.get(channelId);
+      if (!handler) {
+        handler = () => {
+          toggleFavorite(channelId);
+          if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        };
+        longPressHandlers.set(channelId, handler);
+      }
+      return handler;
+    },
+    [toggleFavorite, longPressHandlers],
+  );
+
   const renderChannel = useCallback(
     ({ item: channel }: { item: Channel }) => (
       <ChannelCardHorizontal
@@ -441,6 +457,7 @@ export default function ChannelsScreen() {
         isFavorite={favoritesSet.has(channel.id)}
         onPress={getChannelPressHandler(channel.id)}
         onFavoritePress={getFavoritePressHandler(channel.id)}
+        onLongPress={getLongPressHandler(channel.id)}
         cardWidth={cardWidth}
         isUltraWide={isUltraWide}
         textSize={settings.textSize}
@@ -452,6 +469,7 @@ export default function ChannelsScreen() {
       favoritesSet,
       getChannelPressHandler,
       getFavoritePressHandler,
+      getLongPressHandler,
       cardWidth,
       isUltraWide,
       settings.textSize,
