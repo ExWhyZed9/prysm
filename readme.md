@@ -24,6 +24,7 @@ It is designed for large playlists, fast channel browsing, smooth playback, and 
   - Aspect ratio adjustments
   - Audio track selection
   - Subtitle support
+- **Network Stream Player:** Play any stream directly with custom HTTP headers (Cookie, Referer, Origin), User-Agent presets, and DRM support (Widevine, PlayReady, ClearKey).
 - **TV Optimized:** Full Android TV remote and D-pad navigation support.
 - **UI:** Sleek, modern Dark Mode interface.
 
@@ -77,6 +78,7 @@ It is designed for large playlists, fast channel browsing, smooth playback, and 
 ### 📦 Installation
 
 1. Clone the repository and navigate into the directory:
+
    ```bash
    git clone https://github.com/ExWhyZed9/prysm.git
    cd prysm
