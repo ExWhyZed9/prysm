@@ -2,14 +2,13 @@ import React, { useState, useCallback, useEffect } from "react";
 import {
   StyleSheet,
   View,
-  ScrollView,
   TextInput,
   Pressable,
   Modal,
   Platform,
   ViewStyle,
-  KeyboardAvoidingView,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -272,155 +271,147 @@ export default function NetworkStreamScreen() {
         <View style={styles.headerRight} />
       </View>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      <KeyboardAwareScrollView
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingBottom: insets.bottom + Spacing["2xl"],
+            paddingLeft: insets.left + Spacing.md,
+            paddingRight: insets.right + Spacing.md,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={24}
       >
-        <ScrollView
-          contentContainerStyle={[
-            styles.content,
-            {
-              paddingBottom: insets.bottom + Spacing["2xl"],
-              paddingLeft: insets.left + Spacing.md,
-              paddingRight: insets.right + Spacing.md,
-            },
-          ]}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Stream */}
-          <SectionLabel>STREAM</SectionLabel>
-          <View style={styles.section}>
-            <Field
-              label="Media Stream URL"
-              value={config.url}
-              onChangeText={(v) => update({ url: v })}
-              placeholder="https://example.com/stream.m3u8"
-              keyboardType="url"
-            />
-          </View>
+        {/* Stream */}
+        <SectionLabel>STREAM</SectionLabel>
+        <View style={styles.section}>
+          <Field
+            label="Media Stream URL"
+            value={config.url}
+            onChangeText={(v) => update({ url: v })}
+            placeholder="https://example.com/stream.m3u8"
+            keyboardType="url"
+          />
+        </View>
 
-          {/* HTTP Headers */}
-          <SectionLabel>HTTP HEADERS</SectionLabel>
-          <View style={styles.section}>
-            <Field
-              label="Cookie"
-              value={config.cookie}
-              onChangeText={(v) => update({ cookie: v })}
-              placeholder="sessionid=abc123; token=xyz"
-            />
-            <Field
-              label="Referer"
-              value={config.referer}
-              onChangeText={(v) => update({ referer: v })}
-              placeholder="https://example.com/"
-              keyboardType="url"
-            />
-            <Field
-              label="Origin"
-              value={config.origin}
-              onChangeText={(v) => update({ origin: v })}
-              placeholder="https://example.com"
-              keyboardType="url"
-            />
-          </View>
+        {/* HTTP Headers */}
+        <SectionLabel>HTTP HEADERS</SectionLabel>
+        <View style={styles.section}>
+          <Field
+            label="Cookie"
+            value={config.cookie}
+            onChangeText={(v) => update({ cookie: v })}
+            placeholder="sessionid=abc123; token=xyz"
+          />
+          <Field
+            label="Referer"
+            value={config.referer}
+            onChangeText={(v) => update({ referer: v })}
+            placeholder="https://example.com/"
+            keyboardType="url"
+          />
+          <Field
+            label="Origin"
+            value={config.origin}
+            onChangeText={(v) => update({ origin: v })}
+            placeholder="https://example.com"
+            keyboardType="url"
+          />
+        </View>
 
-          {/* User Agent */}
-          <SectionLabel>USER AGENT</SectionLabel>
-          <View style={styles.section}>
-            <PickerRow
-              label="User Agent Preset"
-              value={getUserAgentLabel()}
-              onPress={() => setShowUserAgentModal(true)}
-            />
-            {config.userAgent === "custom" ? (
-              <Field
-                label="Custom User Agent String"
-                value={config.customUserAgent}
-                onChangeText={(v) => update({ customUserAgent: v })}
-                placeholder="Mozilla/5.0 ..."
-                multiline
-              />
-            ) : (
-              <View style={styles.uaPreview}>
-                <ThemedText
-                  type="caption"
-                  style={[styles.uaPreviewText, { color: theme.textSecondary }]}
-                  numberOfLines={2}
-                >
-                  {USER_AGENT_STRINGS[config.userAgent]}
-                </ThemedText>
-              </View>
-            )}
-          </View>
-
-          {/* DRM */}
-          <SectionLabel>DRM</SectionLabel>
-          <View style={styles.section}>
-            <PickerRow
-              label="DRM Scheme"
-              value={getDrmSchemeLabel()}
-              onPress={() => setShowDrmSchemeModal(true)}
-            />
+        {/* User Agent */}
+        <SectionLabel>USER AGENT</SectionLabel>
+        <View style={styles.section}>
+          <PickerRow
+            label="User Agent Preset"
+            value={getUserAgentLabel()}
+            onPress={() => setShowUserAgentModal(true)}
+          />
+          {config.userAgent === "custom" ? (
             <Field
-              label="DRM License URL or Key"
-              value={config.drmLicenseUrl}
-              onChangeText={(v) => update({ drmLicenseUrl: v })}
-              placeholder="https://license.example.com/widevine  or  base64key:base64iv"
-              keyboardType="url"
+              label="Custom User Agent String"
+              value={config.customUserAgent}
+              onChangeText={(v) => update({ customUserAgent: v })}
+              placeholder="Mozilla/5.0 ..."
               multiline
             />
-            <View
-              style={[
-                styles.drmHint,
-                { backgroundColor: Colors.dark.primary + "10" },
-              ]}
-            >
-              <Ionicons
-                name="information-circle-outline"
-                size={14}
-                color={Colors.dark.primary}
-                style={{ marginTop: 1 }}
-              />
+          ) : (
+            <View style={styles.uaPreview}>
               <ThemedText
                 type="caption"
-                style={[styles.drmHintText, { color: theme.textSecondary }]}
+                style={[styles.uaPreviewText, { color: theme.textSecondary }]}
+                numberOfLines={2}
               >
-                For ClearKey, enter the key directly as{" "}
-                <ThemedText
-                  type="caption"
-                  style={{ color: Colors.dark.primary }}
-                >
-                  keyId:key
-                </ThemedText>{" "}
-                (hex or base64). For Widevine/PlayReady, enter the license
-                server URL.
+                {USER_AGENT_STRINGS[config.userAgent]}
               </ThemedText>
             </View>
-          </View>
+          )}
+        </View>
 
-          {/* Action buttons */}
-          <View style={styles.actions}>
-            <Button
-              onPress={handleClear}
-              style={[
-                styles.actionButton,
-                { backgroundColor: theme.backgroundSecondary },
-              ]}
-              textStyle={{ color: theme.text }}
+        {/* DRM */}
+        <SectionLabel>DRM</SectionLabel>
+        <View style={styles.section}>
+          <PickerRow
+            label="DRM Scheme"
+            value={getDrmSchemeLabel()}
+            onPress={() => setShowDrmSchemeModal(true)}
+          />
+          <Field
+            label="DRM License URL or Key"
+            value={config.drmLicenseUrl}
+            onChangeText={(v) => update({ drmLicenseUrl: v })}
+            placeholder="https://license.example.com/widevine"
+            keyboardType="url"
+          />
+          <View
+            style={[
+              styles.drmHint,
+              { backgroundColor: Colors.dark.primary + "10" },
+            ]}
+          >
+            <Ionicons
+              name="information-circle-outline"
+              size={14}
+              color={Colors.dark.primary}
+              style={{ marginTop: 1 }}
+            />
+            <ThemedText
+              type="caption"
+              style={[styles.drmHintText, { color: theme.textSecondary }]}
             >
-              Clear
-            </Button>
-            <Button
-              onPress={handlePlay}
-              style={styles.actionButton}
-              disabled={!config.url.trim()}
-            >
-              Play
-            </Button>
+              For ClearKey, enter the key directly as{" "}
+              <ThemedText type="caption" style={{ color: Colors.dark.primary }}>
+                keyId:key
+              </ThemedText>{" "}
+              (hex or base64). For Widevine/PlayReady, enter the license server
+              URL.
+            </ThemedText>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </View>
+
+        {/* Action buttons */}
+        <View style={styles.actions}>
+          <Button
+            onPress={handleClear}
+            style={[
+              styles.actionButton,
+              { backgroundColor: theme.backgroundSecondary },
+            ]}
+            textStyle={{ color: theme.text }}
+          >
+            Clear
+          </Button>
+          <Button
+            onPress={handlePlay}
+            style={styles.actionButton}
+            disabled={!config.url.trim()}
+          >
+            Play
+          </Button>
+        </View>
+      </KeyboardAwareScrollView>
 
       {/* User Agent picker modal */}
       <Modal
