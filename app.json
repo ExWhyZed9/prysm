@@ -35,6 +35,7 @@
           "banner": "./assets/images/android-tv-banner.png"
         }
       ],
+      ["./plugins/withNetworkSecurityConfig", {}],
       [
         "expo-splash-screen",
         {
