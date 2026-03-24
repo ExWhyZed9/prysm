@@ -1,8 +1,18 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo, ReactNode } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+  ReactNode,
+} from "react";
 import { AppState, AppStateStatus } from "react-native";
 import { Channel, Playlist } from "@/types/playlist";
 import * as storage from "@/lib/storage";
 import { parseM3U, fetchAndParseM3U } from "@/lib/m3u-parser";
+import { syncFavourites } from "@/lib/tv-channel";
 
 interface PlaylistContextType {
   playlist: Playlist | null;
@@ -18,7 +28,11 @@ interface PlaylistContextType {
   error: string | null;
   loadPlaylistFromUrl: (url: string, name: string) => Promise<void>;
   loadPlaylistFromFile: (content: string, name: string) => Promise<void>;
-  updatePlaylistInfo: (playlistId: string, name: string, url?: string) => Promise<void>;
+  updatePlaylistInfo: (
+    playlistId: string,
+    name: string,
+    url?: string,
+  ) => Promise<void>;
   switchPlaylist: (playlistId: string) => Promise<void>;
   deletePlaylist: (playlistId: string) => Promise<void>;
   toggleFavorite: (channelId: string) => Promise<void>;
@@ -36,7 +50,9 @@ interface PlaylistContextType {
   isCategoryFavorite: (category: string) => boolean;
 }
 
-const PlaylistContext = createContext<PlaylistContextType | undefined>(undefined);
+const PlaylistContext = createContext<PlaylistContextType | undefined>(
+  undefined,
+);
 
 export function PlaylistProvider({ children }: { children: ReactNode }) {
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
@@ -88,19 +104,28 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
     loadInitialData();
   }, []);
 
-  const getRefreshIntervalMs = useCallback((interval: storage.AutoRefreshInterval): number | null => {
-    switch (interval) {
-      case "5min": return 5 * 60 * 1000;
-      case "15min": return 15 * 60 * 1000;
-      case "1day": return 24 * 60 * 60 * 1000;
-      default: return null;
-    }
-  }, []);
+  const getRefreshIntervalMs = useCallback(
+    (interval: storage.AutoRefreshInterval): number | null => {
+      switch (interval) {
+        case "5min":
+          return 5 * 60 * 1000;
+        case "15min":
+          return 15 * 60 * 1000;
+        case "1day":
+          return 24 * 60 * 60 * 1000;
+        default:
+          return null;
+      }
+    },
+    [],
+  );
 
   const performAutoRefresh = useCallback(async () => {
     if (isLoadingPlaylist) return;
-    
-    const currentPlaylistInfo = playlists.find(p => p.id === activePlaylistId);
+
+    const currentPlaylistInfo = playlists.find(
+      (p) => p.id === activePlaylistId,
+    );
     if (!currentPlaylistInfo) return;
 
     try {
@@ -135,7 +160,12 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
         clearInterval(autoRefreshTimerRef.current);
       }
     };
-  }, [settings.autoRefreshInterval, activePlaylistId, getRefreshIntervalMs, performAutoRefresh]);
+  }, [
+    settings.autoRefreshInterval,
+    activePlaylistId,
+    getRefreshIntervalMs,
+    performAutoRefresh,
+  ]);
 
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
@@ -150,7 +180,10 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const subscription = AppState.addEventListener("change", handleAppStateChange);
+    const subscription = AppState.addEventListener(
+      "change",
+      handleAppStateChange,
+    );
     return () => subscription?.remove();
   }, [settings.autoRefreshInterval, getRefreshIntervalMs, performAutoRefresh]);
 
@@ -244,28 +277,32 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const updatePlaylistInfo = async (playlistId: string, name: string, url?: string) => {
+  const updatePlaylistInfo = async (
+    playlistId: string,
+    name: string,
+    url?: string,
+  ) => {
     try {
-      const currentPlaylistInfo = playlists.find(p => p.id === playlistId);
+      const currentPlaylistInfo = playlists.find((p) => p.id === playlistId);
       const urlChanged = url && currentPlaylistInfo?.url !== url;
-      
+
       if (urlChanged && url) {
         setIsLoadingPlaylist(true);
         const newPlaylist = await fetchAndParseM3U(url, name);
         newPlaylist.id = playlistId;
         await storage.savePlaylist(newPlaylist, "m3u");
-        
+
         if (activePlaylistId === playlistId) {
           setPlaylist(newPlaylist);
         }
       } else {
         await storage.updatePlaylistInfo(playlistId, name, url);
-        
+
         if (activePlaylistId === playlistId && playlist) {
           setPlaylist({ ...playlist, name, url: url || playlist.url });
         }
       }
-      
+
       const updatedPlaylists = await storage.getPlaylistList();
       setPlaylists(updatedPlaylists);
     } catch (err: any) {
@@ -280,7 +317,7 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
     await storage.deletePlaylist(playlistId);
     const updatedPlaylists = await storage.getPlaylistList();
     setPlaylists(updatedPlaylists);
-    
+
     if (activePlaylistId === playlistId) {
       if (updatedPlaylists.length > 0) {
         await switchPlaylist(updatedPlaylists[0].id);
@@ -294,10 +331,17 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
   const toggleFavorite = async (channelId: string) => {
     const newFavorites = await storage.toggleFavorite(channelId);
     setFavorites(newFavorites);
+    // Sync the updated favourites list to the Android TV launcher channel
+    const favChannels = newFavorites
+      .map((id) => channelIndexMap.get(id))
+      .filter((ch): ch is Channel => ch !== undefined)
+      .map((ch) => ({ id: ch.id, name: ch.name, logo: ch.logo }));
+    syncFavourites(favChannels);
   };
 
   const toggleFavoriteCategory = async (category: string) => {
-    const newFavoriteCategories = await storage.toggleFavoriteCategory(category);
+    const newFavoriteCategories =
+      await storage.toggleFavoriteCategory(category);
     setFavoriteCategories(newFavoriteCategories);
   };
 
@@ -305,7 +349,7 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
     (category: string): boolean => {
       return favoriteCategories.includes(category);
     },
-    [favoriteCategories]
+    [favoriteCategories],
   );
 
   const addToRecent = async (channelId: string) => {
@@ -326,7 +370,7 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
       await storage.deletePlaylist(activePlaylistId);
       const updatedPlaylists = await storage.getPlaylistList();
       setPlaylists(updatedPlaylists);
-      
+
       if (updatedPlaylists.length > 0) {
         await switchPlaylist(updatedPlaylists[0].id);
       } else {
@@ -356,7 +400,9 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
   };
 
   const refreshPlaylist = async () => {
-    const currentPlaylistInfo = playlists.find(p => p.id === activePlaylistId);
+    const currentPlaylistInfo = playlists.find(
+      (p) => p.id === activePlaylistId,
+    );
     if (!currentPlaylistInfo) return;
 
     if (currentPlaylistInfo.url) {
@@ -368,7 +414,7 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
     (id: string): Channel | undefined => {
       return channelIndexMap.get(id);
     },
-    [channelIndexMap]
+    [channelIndexMap],
   );
 
   const getChannelsByCategory = useCallback(
@@ -377,7 +423,7 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
       if (category === "All") return playlist.channels;
       return categoryIndexMap.get(category) || [];
     },
-    [playlist, categoryIndexMap]
+    [playlist, categoryIndexMap],
   );
 
   const getFavoriteChannels = useCallback((): Channel[] => {
@@ -387,7 +433,9 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
 
   const getFavoriteCategoryChannels = useCallback((): Channel[] => {
     if (!playlist) return [];
-    return playlist.channels.filter((ch) => favoriteCategories.includes(ch.group));
+    return playlist.channels.filter((ch) =>
+      favoriteCategories.includes(ch.group),
+    );
   }, [playlist, favoriteCategories]);
 
   const searchChannels = useCallback(
@@ -397,10 +445,10 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
       return playlist.channels.filter(
         (ch) =>
           ch.name.toLowerCase().includes(lowerQuery) ||
-          ch.group.toLowerCase().includes(lowerQuery)
+          ch.group.toLowerCase().includes(lowerQuery),
       );
     },
-    [playlist]
+    [playlist],
   );
 
   return (

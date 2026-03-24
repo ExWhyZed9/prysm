@@ -17,6 +17,7 @@ dist/
 # =========================
 android/
 ios/
+!modules/**/android/
 
 # =========================
 # EAS / Signing Credentials

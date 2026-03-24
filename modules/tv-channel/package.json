@@ -1,0 +1,9 @@
+{
+  "name": "tv-channel",
+  "version": "1.0.0",
+  "description": "Publishes Prysm favourites to the Android TV launcher via TvProvider",
+  "main": "src/index.ts",
+  "expo": {
+    "name": "TvChannel"
+  }
+}
