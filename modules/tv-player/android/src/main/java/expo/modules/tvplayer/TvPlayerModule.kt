@@ -19,6 +19,7 @@ class TvPlayerModule : Module() {
                 "onPlayingChange",
                 "onBufferingChange",
                 "onBackgroundAudioChange",
+                "onPositionChange",
             )
 
             // ── Commands (imperative API, auto-added to React ref) ─────────

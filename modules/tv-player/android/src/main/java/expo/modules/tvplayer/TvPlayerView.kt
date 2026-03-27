@@ -6,6 +6,8 @@ import android.content.Intent
 import android.graphics.SurfaceTexture
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.Surface
 import android.view.SurfaceView
@@ -35,8 +37,7 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
     private var exoPlayer: ExoPlayer? = null
 
     // TV → SurfaceView (avoids TextureView z-order conflict with Leanback compositor).
-    // Mobile → TextureView (required when the window is hardware-accelerated but not
-    //          in a separate surface layer, which is the normal mobile Activity setup).
+    // Mobile → TextureView (required in a normal hardware-accelerated Activity window).
     private val isTV: Boolean = context.packageManager
         .hasSystemFeature("android.hardware.type.television") ||
         context.packageManager.hasSystemFeature("android.software.leanback")
@@ -46,12 +47,25 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
 
     private var backgroundAudioEnabled = false
 
-    // ── EventDispatchers (expo-modules-core view callback pattern) ────────────
+    // Polls position/duration every second while playing
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val positionPoller = object : Runnable {
+        override fun run() {
+            val p = exoPlayer ?: return
+            val pos = p.currentPosition
+            val dur = p.duration.takeIf { it != C.TIME_UNSET } ?: 0L
+            onPositionChange(mapOf("position" to pos, "duration" to dur))
+            mainHandler.postDelayed(this, 1000)
+        }
+    }
+
+    // ── EventDispatchers ─────────────────────────────────────────────────────
     val onReady by EventDispatcher()
     val onError by EventDispatcher()
     val onPlayingChange by EventDispatcher()
     val onBufferingChange by EventDispatcher()
     val onBackgroundAudioChange by EventDispatcher()
+    val onPositionChange by EventDispatcher()
 
     init {
         val params = FrameLayout.LayoutParams(
@@ -59,14 +73,10 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
             ViewGroup.LayoutParams.MATCH_PARENT,
             Gravity.CENTER,
         )
-        if (isTV) {
-            addView(surfaceView, params)
-        } else {
-            addView(textureView, params)
-        }
+        if (isTV) addView(surfaceView, params) else addView(textureView, params)
     }
 
-    // ── Public API called from TvPlayerModule ──────────────────────────────
+    // ── Public API ────────────────────────────────────────────────────────────
 
     fun load(
         url: String,
@@ -90,14 +100,9 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
     fun isPlaying(): Boolean = exoPlayer?.isPlaying ?: false
     fun isBackgroundAudioEnabled(): Boolean = backgroundAudioEnabled
 
-    /**
-     * Start the foreground MediaSessionService so audio keeps playing when the
-     * user presses Home.  Safe to call multiple times.
-     */
     fun enableBackgroundAudio() {
         if (backgroundAudioEnabled) return
         val player = exoPlayer ?: return
-
         PlayerRegistry.player = player
         val intent = Intent(context, TvPlayerService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -109,9 +114,6 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
         onBackgroundAudioChange(mapOf("enabled" to true))
     }
 
-    /**
-     * Stop the foreground service and restore normal (foreground-only) playback.
-     */
     fun disableBackgroundAudio(silent: Boolean = false) {
         if (!backgroundAudioEnabled) return
         context.stopService(Intent(context, TvPlayerService::class.java))
@@ -123,6 +125,7 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
     }
 
     fun releasePlayer() {
+        stopPoller()
         disableBackgroundAudio(silent = true)
         exoPlayer?.let {
             it.removeListener(playerListener)
@@ -131,7 +134,16 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
         exoPlayer = null
     }
 
-    // ── Internal ──────────────────────────────────────────────────────────
+    // ── Internal ──────────────────────────────────────────────────────────────
+
+    private fun startPoller() {
+        mainHandler.removeCallbacks(positionPoller)
+        mainHandler.post(positionPoller)
+    }
+
+    private fun stopPoller() {
+        mainHandler.removeCallbacks(positionPoller)
+    }
 
     private fun buildPlayer(
         url: String,
@@ -143,15 +155,15 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
     ) {
         val okHttpClient = OkHttpClient.Builder()
             .addInterceptor { chain ->
-                val reqBuilder = chain.request().newBuilder()
-                headers.forEach { (k, v) -> reqBuilder.addHeader(k, v) }
-                chain.proceed(reqBuilder.build())
+                val req = chain.request().newBuilder()
+                headers.forEach { (k, v) -> req.addHeader(k, v) }
+                chain.proceed(req.build())
             }
             .build()
 
-        val httpDataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
-        val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
-        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
+        val dataSourceFactory = DefaultDataSource.Factory(
+            context, OkHttpDataSource.Factory(okHttpClient)
+        )
 
         val audioAttributes = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
@@ -159,12 +171,11 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
             .build()
 
         val player = ExoPlayer.Builder(context)
-            .setMediaSourceFactory(mediaSourceFactory)
-            .setAudioAttributes(audioAttributes, /* handleAudioFocus= */ true)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+            .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
             .build()
 
-        // Attach to whichever surface type this device uses
         when {
             isTV && surfaceView != null -> player.setVideoSurfaceView(surfaceView)
             textureView != null        -> attachTextureView(player, textureView)
@@ -172,23 +183,18 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
 
         player.addListener(playerListener)
 
-        // Build MediaItem, optionally with DRM
         val mediaItemBuilder = MediaItem.Builder().setUri(Uri.parse(url))
-
         if (!drmType.isNullOrEmpty() && !drmLicenseUrl.isNullOrEmpty()) {
-            val drmUuid = when (drmType.lowercase()) {
+            val uuid = when (drmType.lowercase()) {
                 "widevine"  -> C.WIDEVINE_UUID
                 "playready" -> C.PLAYREADY_UUID
                 "clearkey"  -> C.CLEARKEY_UUID
-                else         -> null
+                else        -> null
             }
-            if (drmUuid != null) {
-                val drmConfigBuilder = DrmConfiguration.Builder(drmUuid)
-                    .setLicenseUri(drmLicenseUrl)
-                if (!drmHeaders.isNullOrEmpty()) {
-                    drmConfigBuilder.setLicenseRequestHeaders(drmHeaders)
-                }
-                mediaItemBuilder.setDrmConfiguration(drmConfigBuilder.build())
+            if (uuid != null) {
+                val drmCfg = DrmConfiguration.Builder(uuid).setLicenseUri(drmLicenseUrl)
+                if (!drmHeaders.isNullOrEmpty()) drmCfg.setLicenseRequestHeaders(drmHeaders)
+                mediaItemBuilder.setDrmConfiguration(drmCfg.build())
             }
         }
 
@@ -199,22 +205,14 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
         exoPlayer = player
     }
 
-    /**
-     * Wire ExoPlayer to a TextureView.  We wait for the SurfaceTexture to be
-     * available (it may already be ready if the view has been through a layout pass).
-     */
     private fun attachTextureView(player: ExoPlayer, tv: TextureView) {
-        if (tv.isAvailable) {
-            player.setVideoSurface(Surface(tv.surfaceTexture))
-        }
+        if (tv.isAvailable) player.setVideoSurface(Surface(tv.surfaceTexture))
         tv.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
             override fun onSurfaceTextureAvailable(st: SurfaceTexture, w: Int, h: Int) {
                 player.setVideoSurface(Surface(st))
             }
             override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, w: Int, h: Int) {}
             override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
-                // Return false so the TextureView keeps the SurfaceTexture alive
-                // when the view is briefly detached (e.g. during navigation).
                 player.setVideoSurface(null)
                 return false
             }
@@ -228,25 +226,32 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
                 Player.STATE_READY     -> {
                     onReady(mapOf<String, Any>())
                     onBufferingChange(mapOf("isBuffering" to false))
+                    startPoller()
                 }
-                Player.STATE_BUFFERING -> onBufferingChange(mapOf("isBuffering" to true))
-                Player.STATE_ENDED     -> {}
-                Player.STATE_IDLE      -> {}
+                Player.STATE_BUFFERING -> {
+                    onBufferingChange(mapOf("isBuffering" to true))
+                    stopPoller()
+                }
+                Player.STATE_ENDED,
+                Player.STATE_IDLE      -> stopPoller()
             }
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             onPlayingChange(mapOf("isPlaying" to isPlaying))
+            if (isPlaying) startPoller() else stopPoller()
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            stopPoller()
             onError(mapOf("message" to (error.message ?: "Unknown playback error")))
         }
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        // Do NOT release here — background audio must keep playing.
-        // The player is only released when JS explicitly calls release().
+        // Do NOT release — background audio keeps playing.
+        // Poller is stopped here; it restarts when playing resumes.
+        stopPoller()
     }
 }

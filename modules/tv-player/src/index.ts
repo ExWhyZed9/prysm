@@ -24,16 +24,20 @@ export interface TvPlayerViewProps {
   onBackgroundAudioChange?: (event: {
     nativeEvent: { enabled: boolean };
   }) => void;
+  /** Fires every ~1 s while playing. position/duration are milliseconds. */
+  onPositionChange?: (event: {
+    nativeEvent: { position: number; duration: number };
+  }) => void;
 }
 
-// ── Native view ──────────────────────────────────────────────────────────────
+// ── Native view ───────────────────────────────────────────────────────────────
 
 const NativeTvPlayerView =
   Platform.OS === "android" ? requireNativeViewManager("TvPlayer") : null;
 
-// ── Imperative commands ──────────────────────────────────────────────────────
+// ── Imperative commands ───────────────────────────────────────────────────────
 // AsyncFunction definitions inside the View block are automatically attached
-// to the React ref of the native view. Call them via ref.current directly.
+// to the React ref. Call them via ref.current directly.
 
 export const TvPlayerCommands = {
   loadSource: (
@@ -70,14 +74,10 @@ export const TvPlayerCommands = {
   isPlaying: (viewRef: React.RefObject<any>): Promise<boolean> | undefined =>
     viewRef.current?.isPlaying(),
 
-  // ── Background audio ──────────────────────────────────────────────────────
-
-  /** Start the foreground MediaSessionService — audio keeps playing in background. */
   enableBackgroundAudio: (
     viewRef: React.RefObject<any>,
   ): Promise<void> | undefined => viewRef.current?.enableBackgroundAudio(),
 
-  /** Stop the foreground service — background playback disabled. */
   disableBackgroundAudio: (
     viewRef: React.RefObject<any>,
   ): Promise<void> | undefined => viewRef.current?.disableBackgroundAudio(),
@@ -88,14 +88,11 @@ export const TvPlayerCommands = {
     viewRef.current?.isBackgroundAudioEnabled(),
 };
 
-// ── React component ──────────────────────────────────────────────────────────
+// ── React component ───────────────────────────────────────────────────────────
 
 export const TvPlayerView = React.forwardRef<any, TvPlayerViewProps>(
   (props, ref) => {
-    if (!NativeTvPlayerView) {
-      // Non-Android platform: render nothing (caller uses expo-video instead)
-      return null;
-    }
+    if (!NativeTvPlayerView) return null;
     return React.createElement(NativeTvPlayerView, { ...props, ref });
   },
 );

@@ -14,8 +14,8 @@ import {
   ScrollView,
   Platform,
   ViewStyle,
+  StatusBar,
 } from "react-native";
-import { useVideoPlayer, VideoView, VideoContentFit } from "expo-video";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import Animated, {
@@ -44,12 +44,25 @@ import {
   TvPlayerCommands,
 } from "../../modules/tv-player/src/index";
 
-// Use the native ExoPlayer/Media3 module on all Android devices.
-// On TV: SurfaceView avoids TextureView z-ordering issues in the Leanback compositor.
-// On mobile: gives us a real foreground-service background-audio path that
-// expo-video does not expose at the JS level.
 const isTV = Platform.isTV;
-const useNativeTvPlayer = Platform.OS === "android";
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatTime(ms: number): string {
+  if (!ms || ms <= 0) return "0:00";
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0)
+    return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+const SEEK_MS = 10_000; // 10 s per double-tap / button
+const CONTROLS_TIMEOUT_MS = 4000;
+
+// ── TVFocusablePressable ──────────────────────────────────────────────────────
 
 function TVFocusablePressable({
   onPress,
@@ -72,26 +85,28 @@ function TVFocusablePressable({
   accessibilityLabel?: string;
   accessibilityRole?: "button" | "link";
 }) {
-  const [isFocused, setIsFocused] = useState(false);
+  const [focused, setFocused] = useState(false);
   const tvProps: any = {};
   if (hasTVPreferredFocus) tvProps.hasTVPreferredFocus = true;
-  const styles = Array.isArray(baseStyle) ? baseStyle : [baseStyle];
+  const base = Array.isArray(baseStyle) ? baseStyle : [baseStyle];
   return (
     <Pressable
       onPress={onPress}
-      onFocus={() => setIsFocused(true)}
-      onBlur={() => setIsFocused(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
       focusable={focusable}
       accessibilityLabel={accessibilityLabel}
       accessibilityRole={accessibilityRole}
       hitSlop={hitSlop}
       {...tvProps}
-      style={[...styles, isFocused && focusedStyle] as ViewStyle[]}
+      style={[...base, focused && focusedStyle] as ViewStyle[]}
     >
       {children}
     </Pressable>
   );
 }
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 export interface DRMConfig {
   type: "widevine" | "fairplay" | "playready" | "clearkey";
@@ -143,53 +158,33 @@ export interface AdvancedVideoPlayerProps {
   isLive?: boolean;
 }
 
+// ── Content-fit cycling ───────────────────────────────────────────────────────
+
+type ContentFit = "contain" | "cover" | "fill";
 const CONTENT_FIT_OPTIONS: {
   label: string;
-  description: string;
-  value: VideoContentFit;
   icon: string;
+  value: ContentFit;
 }[] = [
-  {
-    label: "Fit",
-    description: "Show full video with bars",
-    value: "contain",
-    icon: "contract-outline",
-  },
-  {
-    label: "Fill",
-    description: "Fill screen, may crop edges",
-    value: "cover",
-    icon: "expand-outline",
-  },
-  {
-    label: "Stretch",
-    description: "Stretch to fill screen",
-    value: "fill",
-    icon: "resize-outline",
-  },
+  { label: "Fit", icon: "scan-outline", value: "contain" },
+  { label: "Fill", icon: "expand-outline", value: "cover" },
+  { label: "Stretch", icon: "resize-outline", value: "fill" },
 ];
 
-const CONTROLS_TIMEOUT = 5000;
-const SEEK_SECONDS = 10;
+// ── Component ─────────────────────────────────────────────────────────────────
 
-const placeholderImage = require("../../assets/images/placeholder-channel.png");
-
-const arePropsEqual = (
-  prevProps: AdvancedVideoPlayerProps,
-  nextProps: AdvancedVideoPlayerProps,
-): boolean => {
+function arePropsEqual(
+  prev: AdvancedVideoPlayerProps,
+  next: AdvancedVideoPlayerProps,
+) {
   return (
-    prevProps.source === nextProps.source &&
-    prevProps.title === nextProps.title &&
-    prevProps.subtitle === nextProps.subtitle &&
-    prevProps.poster === nextProps.poster &&
-    prevProps.autoPlay === nextProps.autoPlay &&
-    prevProps.isFavorite === nextProps.isFavorite &&
-    prevProps.isLive === nextProps.isLive &&
-    JSON.stringify(prevProps.headers) === JSON.stringify(nextProps.headers) &&
-    JSON.stringify(prevProps.drm) === JSON.stringify(nextProps.drm)
+    prev.source === next.source &&
+    prev.title === next.title &&
+    prev.subtitle === next.subtitle &&
+    prev.isFavorite === next.isFavorite &&
+    prev.isLive === next.isLive
   );
-};
+}
 
 export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   source,
@@ -215,149 +210,151 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   useKeepAwake();
 
   const insets = useSafeAreaInsets();
-  const { playerControls, isUltraWide, width, height } = useResponsive();
-  const videoRef = useRef<VideoView>(null);
-  // Ref for the native TvPlayerView (Android TV only)
-  const tvPlayerRef = useRef<any>(null);
-  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const { playerControls, isUltraWide, width } = useResponsive();
 
+  // ── Refs ───────────────────────────────────────────────────────────────────
+  const tvPlayerRef = useRef<any>(null);
+  const controlsTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const showControlsRef = useRef(false);
+  const resetTimeoutRef = useRef<() => void>(() => {});
+
+  // ── State ──────────────────────────────────────────────────────────────────
   const [showControls, setShowControls] = useState(false);
-  const [showRecentChannels, setShowRecentChannels] = useState(false);
   const [isPlaying, setIsPlaying] = useState(autoPlay);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
   const [isBuffering, setIsBuffering] = useState(false);
-  // Android only — tracks whether the foreground service is running
+  const [error, setError] = useState<string | null>(null);
+  const [positionMs, setPositionMs] = useState(0);
+  const [durationMs, setDurationMs] = useState(0);
   const [isBackgroundPlaying, setIsBackgroundPlaying] = useState(false);
-
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [showQualityModal, setShowQualityModal] = useState(false);
-  const [showZoomModal, setShowZoomModal] = useState(false);
-  const [showAudioModal, setShowAudioModal] = useState(false);
-  const [showSubtitleModal, setShowSubtitleModal] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
-
+  const [contentFit, setContentFit] = useState<ContentFit>("contain");
+  const [currentSource, setCurrentSource] = useState(source);
   const [detectedQualities, setDetectedQualities] = useState<VideoQuality[]>(
     [],
   );
-  const [selectedQuality, setSelectedQuality] = useState<string>("auto");
-  const [currentSource, setCurrentSource] = useState(source);
-  const [contentFit, setContentFit] = useState<VideoContentFit>("contain");
+  const [selectedQuality, setSelectedQuality] = useState("auto");
   const [selectedAudioTrack, setSelectedAudioTrack] = useState<string | null>(
     null,
   );
   const [selectedSubtitleTrack, setSelectedSubtitleTrack] = useState<
     string | null
   >(null);
-  const [subtitlesEnabled, setSubtitlesEnabled] = useState(false);
+  const [showRecentPanel, setShowRecentPanel] = useState(false);
 
-  const [seekIndicator, setSeekIndicator] = useState<{
+  // Modals
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showQualityModal, setShowQualityModal] = useState(false);
+  const [showAspectModal, setShowAspectModal] = useState(false);
+  const [showAudioModal, setShowAudioModal] = useState(false);
+  const [showSubtitleModal, setShowSubtitleModal] = useState(false);
+
+  // Seek flash
+  const [seekFlash, setSeekFlash] = useState<{
     visible: boolean;
-    direction: "forward" | "backward";
-    seconds: number;
-  }>({
-    visible: false,
-    direction: "forward",
-    seconds: 0,
-  });
+    dir: "backward" | "forward";
+  }>({ visible: false, dir: "forward" });
 
+  const qualities =
+    detectedQualities.length > 0 ? detectedQualities : propQualities;
+
+  // ── Animations ─────────────────────────────────────────────────────────────
   const controlsOpacity = useSharedValue(0);
-  const recentPanelTranslate = useSharedValue(300);
-  const seekIndicatorOpacity = useSharedValue(0);
-  const lockIndicatorOpacity = useSharedValue(0);
-  const showControlsRef = useRef(showControls);
-  const resetControlsTimeoutRef = useRef<() => void>(() => {});
+  const recentTranslateX = useSharedValue(280);
+  const seekFlashOpacity = useSharedValue(0);
+  const lockOpacity = useSharedValue(0);
 
+  const animControls = useAnimatedStyle(() => ({
+    opacity: controlsOpacity.value,
+  }));
+  const animRecent = useAnimatedStyle(() => ({
+    transform: [{ translateX: recentTranslateX.value }],
+  }));
+  const animSeekFlash = useAnimatedStyle(() => ({
+    opacity: seekFlashOpacity.value,
+  }));
+  const animLock = useAnimatedStyle(() => ({ opacity: lockOpacity.value }));
+
+  // ── Controls timeout ───────────────────────────────────────────────────────
+  const resetTimeout = useCallback(() => {
+    if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
+    if (isTV) return;
+    controlsTimerRef.current = setTimeout(() => {
+      if (
+        !showSettingsModal &&
+        !showQualityModal &&
+        !showAspectModal &&
+        !showAudioModal &&
+        !showSubtitleModal &&
+        isPlaying
+      ) {
+        setShowControls(false);
+      }
+    }, CONTROLS_TIMEOUT_MS);
+  }, [
+    isPlaying,
+    showSettingsModal,
+    showQualityModal,
+    showAspectModal,
+    showAudioModal,
+    showSubtitleModal,
+  ]);
+
+  useEffect(() => {
+    resetTimeoutRef.current = resetTimeout;
+  }, [resetTimeout]);
   useEffect(() => {
     showControlsRef.current = showControls;
   }, [showControls]);
 
-  const qualities =
-    detectedQualities.length > 0 ? detectedQualities : propQualities;
-  const audioTracks = propAudioTracks;
-  const subtitleTracks = propSubtitleTracks;
+  const showControlsWithTimeout = useCallback(() => {
+    setShowControls(true);
+    controlsOpacity.value = withTiming(1, { duration: 200 });
+    resetTimeoutRef.current();
+  }, [controlsOpacity]);
+
+  const hideControls = useCallback(() => {
+    setShowControls(false);
+    controlsOpacity.value = withTiming(0, { duration: 200 });
+  }, [controlsOpacity]);
 
   useEffect(() => {
-    if (source && isHLSStream(source)) {
-      parseHLSQualities(source)
-        .then((parsedQualities) => {
-          if (parsedQualities.length > 0) {
-            setDetectedQualities(parsedQualities);
-          }
-        })
-        .catch((err) => {
-          console.warn("Failed to parse HLS qualities:", err);
-        });
-    }
-  }, [source]);
-
-  const videoSource = useMemo(() => {
-    if (headers && Object.keys(headers).length > 0) {
-      return {
-        uri: currentSource,
-        headers: headers,
-      };
-    }
-    return currentSource;
-  }, [currentSource, headers]);
-
-  // expo-video player — only used on non-TV or iOS
-  const player = useVideoPlayer(
-    useNativeTvPlayer ? null : videoSource,
-    (player) => {
-      player.loop = true;
-      if (autoPlay) {
-        player.play();
-      }
-    },
-  );
-
-  const animatedControlsStyle = useAnimatedStyle(() => ({
-    opacity: controlsOpacity.value,
-  }));
-
-  const animatedRecentPanelStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: recentPanelTranslate.value }],
-  }));
-
-  const animatedSeekIndicatorStyle = useAnimatedStyle(() => ({
-    opacity: seekIndicatorOpacity.value,
-  }));
-
-  const animatedLockIndicatorStyle = useAnimatedStyle(() => ({
-    opacity: lockIndicatorOpacity.value,
-  }));
-
-  useEffect(() => {
-    if (showControls && !isLocked) {
+    if (showControls) {
       controlsOpacity.value = withTiming(1, { duration: 200 });
-      startControlsTimeout();
-    } else if (!showControls || isLocked) {
+    } else {
       controlsOpacity.value = withTiming(0, { duration: 200 });
     }
-  }, [showControls, isLocked]);
+  }, [showControls, controlsOpacity]);
 
   useEffect(() => {
-    if (showRecentChannels) {
-      recentPanelTranslate.value = withSpring(0, {
-        damping: 20,
-        stiffness: 200,
-      });
+    if (showRecentPanel) {
+      recentTranslateX.value = withSpring(0, { damping: 20 });
     } else {
-      recentPanelTranslate.value = withSpring(300, {
-        damping: 20,
-        stiffness: 200,
-      });
+      recentTranslateX.value = withSpring(280, { damping: 20 });
     }
-  }, [showRecentChannels]);
+  }, [showRecentPanel, recentTranslateX]);
 
-  // Load source into native TvPlayerView.
-  // Called both on source/header/drm changes AND when the view first mounts
-  // (handled via the tvPlayerCallbackRef below which fires once the ref is set).
-  const loadNativeSource = useCallback(() => {
-    if (!useNativeTvPlayer || !tvPlayerRef.current) return;
+  useEffect(() => {
+    if (isLocked) {
+      lockOpacity.value = withTiming(1, { duration: 150 });
+    } else {
+      lockOpacity.value = withTiming(0, { duration: 150 });
+    }
+  }, [isLocked, lockOpacity]);
+
+  // ── HLS quality detection ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!source || !isHLSStream(source)) return;
+    parseHLSQualities(source)
+      .then((q) => {
+        if (q.length > 0) setDetectedQualities(q);
+      })
+      .catch(() => {});
+  }, [source]);
+
+  // ── Native player load ─────────────────────────────────────────────────────
+  const loadSource = useCallback(() => {
+    if (!tvPlayerRef.current) return;
     setIsLoading(true);
     setError(null);
     TvPlayerCommands.loadSource(tvPlayerRef, {
@@ -370,265 +367,106 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     });
   }, [currentSource, headers, drm, autoPlay]);
 
-  // Re-run whenever the source / drm / headers change (tvPlayerRef is already set)
   useEffect(() => {
-    if (!useNativeTvPlayer) return;
-    loadNativeSource();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadSource();
   }, [currentSource, headers, drm, autoPlay]);
 
-  // Callback ref: just keeps tvPlayerRef.current in sync with the native node.
-  // The useEffect below ([currentSource, headers, drm, autoPlay]) fires after
-  // every render that changes those deps — including the initial mount — so it
-  // will call loadNativeSource() once the ref is set without needing a stale
-  // closure here.
   const tvPlayerCallbackRef = useCallback((node: any) => {
     (tvPlayerRef as React.MutableRefObject<any>).current = node;
   }, []);
 
-  // Cleanup native player on unmount (TV)
   useEffect(() => {
-    if (!useNativeTvPlayer) return;
     return () => {
       TvPlayerCommands.release(tvPlayerRef);
     };
   }, []);
 
+  // ── TV D-pad handler ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (useNativeTvPlayer) return; // handled via onReady/onError/onPlayingChange/onBufferingChange props
-    if (!player) return;
-
-    const statusSubscription = player.addListener(
-      "statusChange",
-      (payload: any) => {
-        const status = payload?.status || payload;
-        if (status === "readyToPlay") {
-          setIsLoading(false);
-          setError(null);
-          setIsBuffering(false);
-        } else if (status === "error") {
-          setIsLoading(false);
-          setIsBuffering(false);
-          setError("Failed to load stream");
-          onError?.("Failed to load stream");
-        } else if (status === "loading") {
-          setIsLoading(true);
-        }
-      },
-    );
-
-    const playingSubscription = player.addListener(
-      "playingChange",
-      (payload: any) => {
-        const playing =
-          typeof payload === "boolean" ? payload : payload?.isPlaying;
-        setIsPlaying(!!playing);
-      },
-    );
-
-    const timeUpdateInterval = setInterval(() => {
-      if (player && !isLive) {
-        setCurrentTime(player.currentTime);
-        setDuration(player.duration || 0);
-      }
-    }, 500);
-
-    return () => {
-      statusSubscription.remove();
-      playingSubscription.remove();
-      clearInterval(timeUpdateInterval);
-    };
-  }, [player, onError, isLive]);
-
-  const startControlsTimeout = () => {
-    if (controlsTimeoutRef.current) {
-      clearTimeout(controlsTimeoutRef.current);
-    }
-    if (isTV) return;
-    controlsTimeoutRef.current = setTimeout(() => {
-      if (
-        isPlaying &&
-        !showSettingsModal &&
-        !showQualityModal &&
-        !showZoomModal &&
-        !showAudioModal &&
-        !showSubtitleModal
-      ) {
-        setShowControls(false);
-        setShowRecentChannels(false);
-      }
-    }, CONTROLS_TIMEOUT);
-  };
-
-  const resetControlsTimeout = useCallback(() => {
-    startControlsTimeout();
-  }, []);
-
-  useEffect(() => {
-    resetControlsTimeoutRef.current = resetControlsTimeout;
-  }, [resetControlsTimeout]);
-
-  const handleScreenTap = useCallback(() => {
-    if (isLocked) {
-      lockIndicatorOpacity.value = withTiming(1, { duration: 150 });
-      setTimeout(() => {
-        lockIndicatorOpacity.value = withTiming(0, { duration: 300 });
-      }, 1500);
-      return;
-    }
-    setShowControls((prev) => !prev);
-    if (!showControls) {
-      setShowRecentChannels(false);
-    }
-  }, [isLocked, showControls]);
-
-  const handleDoubleTap = useCallback(
-    (x: number) => {
-      if (isLocked || isLive) return;
-
-      const screenWidth = width;
-      const isLeftSide = x < screenWidth / 2;
-      const seekAmount = isLeftSide ? -SEEK_SECONDS : SEEK_SECONDS;
-
-      if (useNativeTvPlayer || player) {
-        const newTime = Math.max(
-          0,
-          Math.min((player?.currentTime ?? currentTime) + seekAmount, duration),
-        );
-        if (useNativeTvPlayer) {
-          TvPlayerCommands.seekTo(tvPlayerRef, newTime * 1000);
-        } else if (player) {
-          player.currentTime = newTime;
-        }
-        if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-        setSeekIndicator({
-          visible: true,
-          direction: isLeftSide ? "backward" : "forward",
-          seconds: SEEK_SECONDS,
+    if (!isTV) return;
+    let handler: any = null;
+    try {
+      const RN = require("react-native");
+      const TVHandler = RN.TVEventHandler;
+      if (TVHandler) {
+        handler = new TVHandler();
+        handler.enable({} as any, (_: any, evt: any) => {
+          if (!evt) return;
+          const { eventType } = evt;
+          const visible = showControlsRef.current;
+          if (
+            ["select", "playPause", "up", "down", "left", "right"].includes(
+              eventType,
+            )
+          ) {
+            if (!visible) {
+              setShowControls(true);
+              resetTimeoutRef.current();
+            } else {
+              resetTimeoutRef.current();
+            }
+          } else if (eventType === "menu" || eventType === "back") {
+            if (visible) {
+              setShowControls(false);
+              setShowRecentPanel(false);
+            } else if (onBack) onBack();
+          }
         });
-        seekIndicatorOpacity.value = withTiming(1, { duration: 100 });
-
-        setTimeout(() => {
-          seekIndicatorOpacity.value = withTiming(0, { duration: 300 });
-          setTimeout(() => {
-            setSeekIndicator((prev) => ({ ...prev, visible: false }));
-          }, 300);
-        }, 600);
       }
-    },
-    [isLocked, isLive, player, width, duration],
-  );
+    } catch (_) {}
+    return () => {
+      try {
+        handler?.disable();
+      } catch (_) {}
+    };
+  }, [onBack]);
 
+  // ── Playback actions ───────────────────────────────────────────────────────
   const handlePlayPause = useCallback(() => {
     if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (useNativeTvPlayer) {
-      if (isPlaying) {
-        TvPlayerCommands.pause(tvPlayerRef);
-      } else {
-        TvPlayerCommands.play(tvPlayerRef);
-      }
-    } else if (player) {
-      if (isPlaying) {
-        player.pause();
-      } else {
-        player.play();
-      }
+    if (isPlaying) {
+      TvPlayerCommands.pause(tvPlayerRef);
+    } else {
+      TvPlayerCommands.play(tvPlayerRef);
     }
-    resetControlsTimeout();
-  }, [player, isPlaying]);
+    resetTimeoutRef.current();
+  }, [isPlaying]);
 
   const handleSeek = useCallback(
-    (seconds: number) => {
-      if (!isLive) {
-        if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        if (useNativeTvPlayer) {
-          const newTimeMs = Math.max(
-            0,
-            Math.min((currentTime + seconds) * 1000, duration * 1000),
-          );
-          TvPlayerCommands.seekTo(tvPlayerRef, newTimeMs);
-        } else if (player) {
-          const newTime = Math.max(
-            0,
-            Math.min(currentTime + seconds, duration),
-          );
-          player.currentTime = newTime;
-        }
-      }
-      resetControlsTimeout();
+    (offsetMs: number) => {
+      if (isLive) return;
+      if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const newPos = Math.max(0, Math.min(positionMs + offsetMs, durationMs));
+      TvPlayerCommands.seekTo(tvPlayerRef, newPos);
+      resetTimeoutRef.current();
     },
-    [player, currentTime, duration, isLive],
+    [positionMs, durationMs, isLive],
+  );
+
+  const handleSeekToPercent = useCallback(
+    (pct: number) => {
+      if (isLive || durationMs <= 0) return;
+      TvPlayerCommands.seekTo(tvPlayerRef, Math.floor(pct * durationMs));
+      resetTimeoutRef.current();
+    },
+    [durationMs, isLive],
   );
 
   const handleQualitySelect = useCallback(
-    (quality: string) => {
+    (q: VideoQuality | "auto") => {
       if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setSelectedQuality(quality);
-
-      if (quality === "auto") {
+      if (q === "auto") {
+        setSelectedQuality("auto");
         setCurrentSource(source);
       } else {
-        const selectedQ = qualities.find((q) => q.label === quality);
-        if (selectedQ?.url) {
-          setCurrentSource(selectedQ.url);
-        }
+        setSelectedQuality(q.label);
+        if (q.url) setCurrentSource(q.url);
       }
-
       setShowQualityModal(false);
-      resetControlsTimeout();
+      resetTimeoutRef.current();
     },
-    [source, qualities],
+    [source],
   );
-
-  const handleZoomSelect = useCallback((fit: VideoContentFit) => {
-    if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setContentFit(fit);
-    setShowZoomModal(false);
-    resetControlsTimeout();
-  }, []);
-
-  const handleAudioTrackSelect = useCallback((trackId: string) => {
-    if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSelectedAudioTrack(trackId);
-    setShowAudioModal(false);
-    resetControlsTimeout();
-  }, []);
-
-  const handleSubtitleTrackSelect = useCallback((trackId: string | null) => {
-    if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSelectedSubtitleTrack(trackId);
-    setSubtitlesEnabled(trackId !== null);
-    setShowSubtitleModal(false);
-    resetControlsTimeout();
-  }, []);
-
-  const handleAspectRatioCycle = useCallback(() => {
-    if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const currentIndex = CONTENT_FIT_OPTIONS.findIndex(
-      (o) => o.value === contentFit,
-    );
-    const nextIndex = (currentIndex + 1) % CONTENT_FIT_OPTIONS.length;
-    setContentFit(CONTENT_FIT_OPTIONS[nextIndex].value);
-    resetControlsTimeout();
-  }, [contentFit]);
-
-  const handlePiP = useCallback(() => {
-    if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (videoRef.current) {
-      videoRef.current.startPictureInPicture();
-    }
-    resetControlsTimeout();
-  }, []);
-
-  const handleLockToggle = useCallback(() => {
-    if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setIsLocked((prev) => !prev);
-    if (!isLocked) {
-      setShowControls(false);
-      setShowRecentChannels(false);
-    }
-  }, [isLocked]);
 
   const handleBackgroundToggle = useCallback(() => {
     if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -637,277 +475,177 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     } else {
       TvPlayerCommands.enableBackgroundAudio(tvPlayerRef);
     }
-    resetControlsTimeout();
+    resetTimeoutRef.current();
   }, [isBackgroundPlaying]);
 
-  const handleRecentChannelPress = useCallback(
-    (channelId: string) => {
-      if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      onChannelSelect?.(channelId);
-      setShowRecentChannels(false);
-    },
-    [onChannelSelect],
-  );
-
-  const toggleRecentChannels = useCallback(() => {
-    if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setShowRecentChannels((prev) => !prev);
-    resetControlsTimeout();
-  }, []);
-
-  useEffect(() => {
-    if (!isTV) return;
-
-    let tvEventHandler: any = null;
-    try {
-      const RN = require("react-native");
-      const TVHandler = RN.TVEventHandler;
-      if (TVHandler) {
-        tvEventHandler = new TVHandler();
-        tvEventHandler.enable({} as any, (_cmp: any, evt: any) => {
-          if (!evt) return;
-          const { eventType } = evt;
-          const controlsVisible = showControlsRef.current;
-          if (eventType === "select" || eventType === "playPause") {
-            if (!controlsVisible) {
-              setShowControls(true);
-              resetControlsTimeoutRef.current();
-            } else {
-              resetControlsTimeoutRef.current();
-            }
-          } else if (eventType === "up" || eventType === "down") {
-            if (!controlsVisible) {
-              setShowControls(true);
-              resetControlsTimeoutRef.current();
-            } else {
-              resetControlsTimeoutRef.current();
-            }
-          } else if (eventType === "left") {
-            if (!controlsVisible) {
-              setShowControls(true);
-              resetControlsTimeoutRef.current();
-            } else {
-              resetControlsTimeoutRef.current();
-            }
-          } else if (eventType === "right") {
-            if (!controlsVisible) {
-              setShowControls(true);
-              resetControlsTimeoutRef.current();
-            } else {
-              resetControlsTimeoutRef.current();
-            }
-          } else if (eventType === "menu" || eventType === "back") {
-            if (controlsVisible) {
-              setShowControls(false);
-              setShowRecentChannels(false);
-            } else if (onBack) {
-              onBack();
-            }
-          }
-        });
-      }
-    } catch (e) {
-      console.log("TVEventHandler error:", e);
-    }
-
-    return () => {
-      if (tvEventHandler) {
-        try {
-          tvEventHandler.disable();
-        } catch (e) {}
-      }
-    };
-  }, [isTV, onBack]);
-
-  const formatTime = (seconds: number): string => {
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-    if (hrs > 0) {
-      return `${hrs}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-    }
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  const getQualityLabel = () => {
-    if (selectedQuality === "auto") return "Auto";
-    const quality = qualities.find((q) => q.label === selectedQuality);
-    return quality?.resolution || selectedQuality;
-  };
-
-  const getZoomLabel = () => {
-    const option = CONTENT_FIT_OPTIONS.find((o) => o.value === contentFit);
-    return option?.label || "Fit";
-  };
-
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-
+  // ── Gestures ───────────────────────────────────────────────────────────────
   const tapGesture = Gesture.Tap()
     .numberOfTaps(1)
     .onEnd(() => {
-      runOnJS(handleScreenTap)();
+      runOnJS(
+        showControlsRef.current
+          ? resetTimeoutRef.current
+          : showControlsWithTimeout,
+      )();
     });
 
   const doubleTapGesture = Gesture.Tap()
     .numberOfTaps(2)
-    .onEnd((event) => {
-      runOnJS(handleDoubleTap)(event.x);
+    .onEnd((evt) => {
+      if (isLive) return;
+      const dir = evt.x < width / 2 ? "backward" : "forward";
+      const offset = dir === "backward" ? -SEEK_MS : SEEK_MS;
+      runOnJS(handleSeek)(offset);
+      if (!isTV)
+        runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Medium);
+      runOnJS(setSeekFlash)({ visible: true, dir });
+      seekFlashOpacity.value = withTiming(1, { duration: 80 }, () => {
+        seekFlashOpacity.value = withTiming(0, { duration: 400 }, () => {
+          runOnJS(setSeekFlash)({ visible: false, dir });
+        });
+      });
     });
 
   const composedGesture = Gesture.Exclusive(doubleTapGesture, tapGesture);
 
-  const displayedRecentChannels = recentChannels.slice(0, 4);
+  // ── Derived ────────────────────────────────────────────────────────────────
+  const progress = durationMs > 0 ? positionMs / durationMs : 0;
+  const displayedRecent = recentChannels.slice(0, 5);
 
+  const currentAspectLabel = useMemo(
+    () =>
+      CONTENT_FIT_OPTIONS.find((o) => o.value === contentFit)?.label ?? "Fit",
+    [contentFit],
+  );
+
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <GestureHandlerRootView style={styles.container}>
-      <GestureDetector gesture={composedGesture}>
-        <View style={styles.videoContainer}>
-          {useNativeTvPlayer ? (
-            <TvPlayerView
-              ref={tvPlayerCallbackRef}
-              style={styles.video}
-              onReady={() => {
-                setIsLoading(false);
-                setError(null);
-                setIsBuffering(false);
-              }}
-              onError={(e) => {
-                const msg = e.nativeEvent.message || "Failed to load stream";
-                setIsLoading(false);
-                setIsBuffering(false);
-                setError(msg);
-                onError?.(msg);
-              }}
-              onPlayingChange={(e) => {
-                setIsPlaying(e.nativeEvent.isPlaying);
-              }}
-              onBufferingChange={(e) => {
-                setIsBuffering(e.nativeEvent.isBuffering);
-                if (e.nativeEvent.isBuffering) setIsLoading(false);
-              }}
-              onBackgroundAudioChange={(e) => {
-                setIsBackgroundPlaying(e.nativeEvent.enabled);
-              }}
-            />
-          ) : (
-            <VideoView
-              ref={videoRef}
-              player={player}
-              style={styles.video}
-              contentFit={contentFit}
-              nativeControls={false}
-              allowsPictureInPicture
-            />
-          )}
+    <GestureHandlerRootView style={st.root}>
+      <StatusBar hidden />
 
+      {/* ── Video surface ─────────────────────────────────────────── */}
+      <GestureDetector gesture={composedGesture}>
+        <View style={st.videoWrap}>
+          <TvPlayerView
+            ref={tvPlayerCallbackRef}
+            style={st.video as any}
+            onReady={() => {
+              setIsLoading(false);
+              setIsBuffering(false);
+              setError(null);
+            }}
+            onError={(e) => {
+              const msg = e.nativeEvent.message || "Stream failed to load";
+              setIsLoading(false);
+              setIsBuffering(false);
+              setError(msg);
+              onError?.(msg);
+            }}
+            onPlayingChange={(e) => setIsPlaying(e.nativeEvent.isPlaying)}
+            onBufferingChange={(e) => {
+              setIsBuffering(e.nativeEvent.isBuffering);
+              if (e.nativeEvent.isBuffering) setIsLoading(false);
+            }}
+            onBackgroundAudioChange={(e) =>
+              setIsBackgroundPlaying(e.nativeEvent.enabled)
+            }
+            onPositionChange={(e) => {
+              setPositionMs(e.nativeEvent.position);
+              setDurationMs(e.nativeEvent.duration);
+            }}
+          />
+
+          {/* Loading / buffering spinner */}
           {(isLoading || isBuffering) && !error ? (
-            <View style={styles.loadingOverlay} pointerEvents="none">
+            <View style={st.centerOverlay} pointerEvents="none">
               <ActivityIndicator size="large" color={Colors.dark.primary} />
-              <ThemedText type="body" style={styles.loadingText}>
-                {isBuffering ? "Buffering..." : "Loading stream..."}
+              <ThemedText type="small" style={st.loadingText}>
+                {isLoading ? "Loading stream…" : "Buffering…"}
               </ThemedText>
             </View>
           ) : null}
 
+          {/* Error state */}
           {error ? (
-            <View style={styles.errorOverlay} pointerEvents="box-none">
-              <View style={styles.errorContent}>
+            <View style={st.centerOverlay}>
+              <View style={st.errorBox}>
                 <Ionicons
                   name="cloud-offline"
-                  size={48}
+                  size={52}
                   color={Colors.dark.error}
                 />
-                <ThemedText type="body" style={styles.errorText}>
+                <ThemedText type="body" style={st.errorText}>
                   {error}
                 </ThemedText>
-                <Pressable
+                <TVFocusablePressable
                   onPress={() => {
-                    setIsLoading(true);
                     setError(null);
-                    if (useNativeTvPlayer) {
-                      TvPlayerCommands.loadSource(tvPlayerRef, {
-                        url: currentSource,
-                        headers:
-                          headers && Object.keys(headers).length > 0
-                            ? headers
-                            : undefined,
-                        drmType: drm?.type as any,
-                        drmLicenseUrl: drm?.licenseServer,
-                        drmHeaders: drm?.headers,
-                        autoPlay: true,
-                      });
-                    } else if (player) {
-                      player.play();
-                    }
+                    setIsLoading(true);
+                    loadSource();
                   }}
-                  style={styles.retryButton}
-                  focusable={true}
+                  baseStyle={st.retryBtn}
+                  focusedStyle={st.retryBtnFocused}
                   accessibilityLabel="Retry"
-                  accessibilityRole="button"
                 >
                   <Ionicons
                     name="refresh"
-                    size={20}
+                    size={18}
                     color={Colors.dark.primary}
                   />
                   <ThemedText
-                    type="body"
-                    style={{ color: Colors.dark.primary, marginLeft: 8 }}
+                    type="small"
+                    style={{ color: Colors.dark.primary, marginLeft: 6 }}
                   >
                     Retry
                   </ThemedText>
-                </Pressable>
+                </TVFocusablePressable>
               </View>
             </View>
           ) : null}
 
-          {seekIndicator.visible ? (
+          {/* Seek flash */}
+          {seekFlash.visible ? (
             <Animated.View
               style={[
-                styles.seekIndicator,
-                seekIndicator.direction === "backward"
-                  ? styles.seekIndicatorLeft
-                  : styles.seekIndicatorRight,
-                animatedSeekIndicatorStyle,
+                st.seekFlash,
+                seekFlash.dir === "backward"
+                  ? st.seekFlashLeft
+                  : st.seekFlashRight,
+                animSeekFlash,
               ]}
+              pointerEvents="none"
             >
               <Ionicons
                 name={
-                  seekIndicator.direction === "backward"
-                    ? "play-back"
-                    : "play-forward"
+                  seekFlash.dir === "backward" ? "play-back" : "play-forward"
                 }
-                size={32}
-                color="#FFFFFF"
+                size={36}
+                color="#fff"
               />
-              <ThemedText type="body" style={styles.seekIndicatorText}>
-                {seekIndicator.seconds}s
+              <ThemedText type="small" style={st.seekFlashText}>
+                {SEEK_MS / 1000}s
               </ThemedText>
             </Animated.View>
           ) : null}
 
+          {/* Lock overlay */}
           {isLocked ? (
-            <Animated.View
-              style={[styles.lockIndicator, animatedLockIndicatorStyle]}
-            >
-              <View style={styles.lockIndicatorContent}>
-                <Ionicons name="lock-closed" size={24} color="#FFFFFF" />
-                <ThemedText type="body" style={styles.lockIndicatorText}>
-                  Controls Locked
+            <Animated.View style={[st.lockOverlay, animLock]}>
+              <View style={st.lockBox}>
+                <Ionicons name="lock-closed" size={28} color="#fff" />
+                <ThemedText type="body" style={{ color: "#fff", marginTop: 8 }}>
+                  Controls locked
                 </ThemedText>
                 <Pressable
-                  onPress={handleLockToggle}
-                  style={styles.unlockButton}
+                  onPress={() => setIsLocked(false)}
+                  style={st.unlockBtn}
                   hitSlop={16}
-                  focusable={true}
-                  accessibilityLabel="Unlock controls"
-                  accessibilityRole="button"
                 >
                   <ThemedText
                     type="small"
                     style={{ color: Colors.dark.primary }}
                   >
-                    Tap to Unlock
+                    Tap to unlock
                   </ThemedText>
                 </Pressable>
               </View>
@@ -916,14 +654,17 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         </View>
       </GestureDetector>
 
-      {/* CHANGED: pointerEvents uses "box-none" when visible to allow taps on empty space to pass through */}
+      {/* ── Controls overlay ──────────────────────────────────────── */}
       <Animated.View
-        style={[styles.controlsOverlay, animatedControlsStyle]}
-        pointerEvents={showControls && !isLocked && !isTV ? "box-none" : "none"}
+        style={[st.controlsOverlay, animControls]}
+        pointerEvents={
+          showControls && !isLocked ? (isTV ? "box-none" : "box-none") : "none"
+        }
       >
+        {/* ── Top bar ─────────────────────────────────────────────── */}
         <View
           style={[
-            styles.topControls,
+            st.topBar,
             {
               paddingTop: insets.top + Spacing.sm,
               paddingLeft: insets.left + Spacing.md,
@@ -931,29 +672,31 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
             },
           ]}
         >
-          <View style={styles.topLeftControls}>
+          {/* Back */}
+          <View style={st.topLeft}>
             {onBack ? (
               <TVFocusablePressable
                 onPress={onBack}
-                baseStyle={styles.controlButton}
-                focusedStyle={styles.controlButtonFocused}
+                baseStyle={st.iconBtn}
+                focusedStyle={st.iconBtnFocused}
                 hitSlop={16}
-                accessibilityLabel="Go back"
+                accessibilityLabel="Back"
               >
                 <Ionicons
-                  name="arrow-back"
-                  size={playerControls.icon}
-                  color="#FFFFFF"
+                  name="chevron-back"
+                  size={playerControls.icon + 4}
+                  color="#fff"
                 />
               </TVFocusablePressable>
             ) : null}
           </View>
 
-          <View style={styles.titleContainer}>
+          {/* Title */}
+          <View style={st.topCenter}>
             {title ? (
               <ThemedText
                 type={isUltraWide ? "body" : "h4"}
-                style={styles.title}
+                style={st.titleText}
                 numberOfLines={1}
               >
                 {title}
@@ -962,7 +705,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
             {subtitle ? (
               <ThemedText
                 type="small"
-                style={styles.subtitle}
+                style={st.subtitleText}
                 numberOfLines={1}
               >
                 {subtitle}
@@ -970,96 +713,105 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
             ) : null}
           </View>
 
-          <View style={styles.topRightControls}>
-            {displayedRecentChannels.length > 0 ? (
+          {/* Top-right actions */}
+          <View style={st.topRight}>
+            {displayedRecent.length > 0 ? (
               <TVFocusablePressable
-                onPress={toggleRecentChannels}
-                baseStyle={styles.controlButton}
-                focusedStyle={styles.controlButtonFocused}
+                onPress={() => {
+                  setShowRecentPanel((p) => !p);
+                  resetTimeoutRef.current();
+                }}
+                baseStyle={st.iconBtn}
+                focusedStyle={st.iconBtnFocused}
                 hitSlop={16}
                 accessibilityLabel="Recent channels"
               >
                 <Ionicons
                   name="time-outline"
                   size={playerControls.icon}
-                  color="#FFFFFF"
+                  color="#fff"
                 />
               </TVFocusablePressable>
             ) : null}
             {onFavoritePress ? (
               <TVFocusablePressable
                 onPress={onFavoritePress}
-                baseStyle={styles.controlButton}
-                focusedStyle={styles.controlButtonFocused}
+                baseStyle={st.iconBtn}
+                focusedStyle={st.iconBtnFocused}
                 hitSlop={16}
                 accessibilityLabel={
-                  isFavorite ? "Remove from favorites" : "Add to favorites"
+                  isFavorite ? "Remove favourite" : "Add favourite"
                 }
               >
                 <Ionicons
                   name={isFavorite ? "star" : "star-outline"}
                   size={playerControls.icon}
-                  color={isFavorite ? Colors.dark.primary : "#FFFFFF"}
+                  color={isFavorite ? Colors.dark.primary : "#fff"}
                 />
               </TVFocusablePressable>
             ) : null}
             <TVFocusablePressable
-              onPress={handleLockToggle}
-              baseStyle={styles.controlButton}
-              focusedStyle={styles.controlButtonFocused}
+              onPress={() => {
+                setIsLocked(true);
+                hideControls();
+              }}
+              baseStyle={st.iconBtn}
+              focusedStyle={st.iconBtnFocused}
               hitSlop={16}
               accessibilityLabel="Lock controls"
             >
               <Ionicons
                 name="lock-open-outline"
                 size={playerControls.icon}
-                color="#FFFFFF"
+                color="#fff"
               />
             </TVFocusablePressable>
           </View>
         </View>
 
-        <View style={styles.centerControls}>
+        {/* ── Center transport controls ────────────────────────────── */}
+        <View style={st.centerRow}>
+          {/* Prev / seek-back */}
           {onPrevious ? (
             <TVFocusablePressable
               onPress={onPrevious}
               baseStyle={[
-                styles.navButton,
+                st.navBtn,
                 {
                   width: playerControls.nav,
                   height: playerControls.nav,
                   borderRadius: playerControls.nav / 2,
                 },
               ]}
-              focusedStyle={styles.navButtonFocused}
-              hitSlop={16}
-              accessibilityLabel="Previous channel"
+              focusedStyle={st.navBtnFocused}
+              hitSlop={12}
+              accessibilityLabel="Previous"
             >
               <Ionicons
                 name="play-skip-back"
                 size={playerControls.icon * 1.2}
-                color="#FFFFFF"
+                color="#fff"
               />
             </TVFocusablePressable>
           ) : !isLive ? (
             <TVFocusablePressable
-              onPress={() => handleSeek(-SEEK_SECONDS)}
+              onPress={() => handleSeek(-SEEK_MS)}
               baseStyle={[
-                styles.navButton,
+                st.navBtn,
                 {
                   width: playerControls.nav,
                   height: playerControls.nav,
                   borderRadius: playerControls.nav / 2,
                 },
               ]}
-              focusedStyle={styles.navButtonFocused}
-              hitSlop={16}
-              accessibilityLabel="Seek backward"
+              focusedStyle={st.navBtnFocused}
+              hitSlop={12}
+              accessibilityLabel="Seek back 10s"
             >
               <Ionicons
                 name="play-back"
                 size={playerControls.icon * 1.2}
-                color="#FFFFFF"
+                color="#fff"
               />
             </TVFocusablePressable>
           ) : (
@@ -1068,68 +820,69 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
             />
           )}
 
+          {/* Play / Pause */}
           <TVFocusablePressable
             onPress={handlePlayPause}
             baseStyle={[
-              styles.playButton,
+              st.playBtn,
               {
                 width: playerControls.play,
                 height: playerControls.play,
                 borderRadius: playerControls.play / 2,
               },
             ]}
-            focusedStyle={styles.playButtonFocused}
-            hitSlop={16}
+            focusedStyle={st.playBtnFocused}
             hasTVPreferredFocus={isTV && showControls}
             accessibilityLabel={isPlaying ? "Pause" : "Play"}
           >
             <Ionicons
               name={isPlaying ? "pause" : "play"}
               size={playerControls.icon * 1.8}
-              color="#FFFFFF"
+              color="#fff"
             />
           </TVFocusablePressable>
 
+          {/* Next / seek-forward */}
           {onNext ? (
             <TVFocusablePressable
               onPress={onNext}
               baseStyle={[
-                styles.navButton,
+                st.navBtn,
                 {
                   width: playerControls.nav,
                   height: playerControls.nav,
                   borderRadius: playerControls.nav / 2,
                 },
               ]}
-              focusedStyle={styles.navButtonFocused}
-              hitSlop={16}
-              accessibilityLabel="Next channel"
+              focusedStyle={st.navBtnFocused}
+              hitSlop={12}
+              accessibilityLabel="Next"
             >
               <Ionicons
                 name="play-skip-forward"
                 size={playerControls.icon * 1.2}
-                color="#FFFFFF"
+                color="#fff"
               />
             </TVFocusablePressable>
           ) : !isLive ? (
             <TVFocusablePressable
-              onPress={() => handleSeek(SEEK_SECONDS)}
+              onPress={() => handleSeek(SEEK_MS)}
               baseStyle={[
-                styles.navButton,
+                st.navBtn,
                 {
                   width: playerControls.nav,
                   height: playerControls.nav,
                   borderRadius: playerControls.nav / 2,
                 },
               ]}
-              focusedStyle={styles.navButtonFocused}
-              hitSlop={16}
-              accessibilityLabel="Seek forward"
+              focusedStyle={st.navBtnFocused}
+              hitSlop={12}
+              accessibilityLabel="Seek forward 10s"
             >
               <Ionicons
                 name="play-forward"
                 size={playerControls.icon * 1.2}
-                color="#FFFFFF"
+                color="#fff"
               />
             </TVFocusablePressable>
           ) : (
@@ -1139,172 +892,258 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
           )}
         </View>
 
+        {/* ── Bottom bar ───────────────────────────────────────────── */}
         <View
           style={[
-            styles.bottomControls,
+            st.bottomBar,
             {
-              paddingBottom: insets.bottom + Spacing.sm,
+              paddingBottom: insets.bottom + Spacing.md,
               paddingLeft: insets.left + Spacing.md,
               paddingRight: insets.right + Spacing.md,
             },
           ]}
         >
+          {/* Progress row — VOD only */}
           {!isLive ? (
-            <View style={styles.progressContainer}>
-              <ThemedText type="caption" style={styles.timeText}>
-                {formatTime(currentTime)}
+            <View style={st.progressRow}>
+              <ThemedText type="caption" style={st.timeText}>
+                {formatTime(positionMs)}
               </ThemedText>
-              <View style={styles.progressBar}>
-                <View
-                  style={[styles.progressFill, { width: `${progress}%` }]}
-                />
-              </View>
-              <ThemedText type="caption" style={styles.timeText}>
-                {formatTime(duration)}
+              <Pressable
+                style={st.seekBar}
+                onPress={(e) => {
+                  const pct =
+                    e.nativeEvent.locationX / (e.nativeEvent.target as any);
+                  // fallback: use the x position relative to screen width
+                  handleSeekToPercent(
+                    e.nativeEvent.locationX /
+                      (width -
+                        insets.left -
+                        insets.right -
+                        Spacing.md * 2 -
+                        50 * 2),
+                  );
+                }}
+              >
+                <View style={st.seekBarTrack}>
+                  <View
+                    style={[st.seekBarFill, { width: `${progress * 100}%` }]}
+                  />
+                  <View
+                    style={[st.seekThumb, { left: `${progress * 100}%` }]}
+                  />
+                </View>
+              </Pressable>
+              <ThemedText type="caption" style={st.timeText}>
+                {formatTime(durationMs)}
               </ThemedText>
             </View>
           ) : null}
 
-          <View style={styles.bottomControlsRow}>
-            <View style={styles.bottomLeft}>
+          {/* Bottom controls row */}
+          <View style={st.bottomRow}>
+            {/* Left badges */}
+            <View style={st.badgeRow}>
               {isLive ? (
-                <View style={styles.liveIndicator}>
-                  <View style={styles.liveDot} />
-                  <ThemedText type="small" style={styles.liveText}>
+                <View style={st.liveBadge}>
+                  <View style={st.liveDot} />
+                  <ThemedText type="small" style={st.liveText}>
                     LIVE
                   </ThemedText>
                 </View>
               ) : null}
               {drm ? (
-                <View style={styles.badge}>
+                <View style={st.drmBadge}>
                   <Ionicons
                     name="shield-checkmark"
                     size={12}
                     color={Colors.dark.success}
                   />
-                  <ThemedText type="caption" style={styles.badgeText}>
+                  <ThemedText
+                    type="caption"
+                    style={{ color: "#fff", marginLeft: 4 }}
+                  >
                     DRM
                   </ThemedText>
                 </View>
               ) : null}
             </View>
 
-            <View style={styles.bottomRight}>
-              {/* Background audio — Android native player only */}
-              {useNativeTvPlayer ? (
-                <TVFocusablePressable
-                  onPress={handleBackgroundToggle}
-                  baseStyle={[
-                    styles.settingsButton,
-                    isBackgroundPlaying && styles.settingsButtonActive,
-                  ]}
-                  focusedStyle={styles.settingsButtonFocused}
-                  accessibilityLabel={
+            {/* Right buttons */}
+            <View style={st.bottomRight}>
+              {/* Background audio — Android only */}
+              <TVFocusablePressable
+                onPress={handleBackgroundToggle}
+                baseStyle={[
+                  st.toolBtn,
+                  isBackgroundPlaying && st.toolBtnActive,
+                ]}
+                focusedStyle={st.toolBtnFocused}
+                accessibilityLabel={
+                  isBackgroundPlaying
+                    ? "Disable background audio"
+                    : "Enable background audio"
+                }
+              >
+                <Ionicons
+                  name={
                     isBackgroundPlaying
-                      ? "Disable background audio"
-                      : "Enable background audio"
+                      ? "musical-notes"
+                      : "musical-notes-outline"
                   }
+                  size={20}
+                  color={isBackgroundPlaying ? Colors.dark.primary : "#fff"}
+                />
+              </TVFocusablePressable>
+
+              {/* Aspect ratio */}
+              <TVFocusablePressable
+                onPress={() => {
+                  setShowAspectModal(true);
+                  resetTimeoutRef.current();
+                }}
+                baseStyle={st.toolBtn}
+                focusedStyle={st.toolBtnFocused}
+                accessibilityLabel="Aspect ratio"
+              >
+                <Ionicons name="scan-outline" size={20} color="#fff" />
+              </TVFocusablePressable>
+
+              {/* Subtitles */}
+              {propSubtitleTracks.length > 0 ? (
+                <TVFocusablePressable
+                  onPress={() => {
+                    setShowSubtitleModal(true);
+                    resetTimeoutRef.current();
+                  }}
+                  baseStyle={[
+                    st.toolBtn,
+                    selectedSubtitleTrack !== null && st.toolBtnActive,
+                  ]}
+                  focusedStyle={st.toolBtnFocused}
+                  accessibilityLabel="Subtitles"
                 >
                   <Ionicons
-                    name={
-                      isBackgroundPlaying
-                        ? "musical-notes"
-                        : "musical-notes-outline"
-                    }
+                    name="text"
                     size={20}
                     color={
-                      isBackgroundPlaying ? Colors.dark.primary : "#FFFFFF"
+                      selectedSubtitleTrack !== null
+                        ? Colors.dark.primary
+                        : "#fff"
                     }
                   />
                 </TVFocusablePressable>
               ) : null}
-              <TVFocusablePressable
-                onPress={() => setShowSettingsModal(true)}
-                baseStyle={styles.settingsButton}
-                focusedStyle={styles.settingsButtonFocused}
-                accessibilityLabel="Settings"
-              >
-                <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
-              </TVFocusablePressable>
-              {/* PiP only works on non-TV through expo-video's VideoView */}
-              {!isTV && !useNativeTvPlayer ? (
+
+              {/* Audio */}
+              {propAudioTracks.length > 0 ? (
                 <TVFocusablePressable
-                  onPress={handlePiP}
-                  baseStyle={styles.settingsButton}
-                  focusedStyle={styles.settingsButtonFocused}
-                  accessibilityLabel="Picture in picture"
+                  onPress={() => {
+                    setShowAudioModal(true);
+                    resetTimeoutRef.current();
+                  }}
+                  baseStyle={st.toolBtn}
+                  focusedStyle={st.toolBtnFocused}
+                  accessibilityLabel="Audio track"
                 >
-                  <Ionicons name="browsers-outline" size={20} color="#FFFFFF" />
+                  <Ionicons
+                    name="volume-medium-outline"
+                    size={20}
+                    color="#fff"
+                  />
                 </TVFocusablePressable>
               ) : null}
+
+              {/* Quality */}
+              {qualities.length > 0 ? (
+                <TVFocusablePressable
+                  onPress={() => {
+                    setShowQualityModal(true);
+                    resetTimeoutRef.current();
+                  }}
+                  baseStyle={st.toolBtn}
+                  focusedStyle={st.toolBtnFocused}
+                  accessibilityLabel="Quality"
+                >
+                  <Ionicons name="layers-outline" size={20} color="#fff" />
+                </TVFocusablePressable>
+              ) : null}
+
+              {/* Settings (opens sub-menu) */}
               <TVFocusablePressable
-                onPress={handleAspectRatioCycle}
-                baseStyle={styles.settingsButton}
-                focusedStyle={styles.settingsButtonFocused}
-                accessibilityLabel="Change aspect ratio"
+                onPress={() => {
+                  setShowSettingsModal(true);
+                  resetTimeoutRef.current();
+                }}
+                baseStyle={st.toolBtn}
+                focusedStyle={st.toolBtnFocused}
+                accessibilityLabel="Settings"
               >
-                <Ionicons name="expand-outline" size={20} color="#FFFFFF" />
+                <Ionicons name="settings-outline" size={20} color="#fff" />
               </TVFocusablePressable>
             </View>
           </View>
         </View>
       </Animated.View>
 
+      {/* ── Recent channels slide-panel ──────────────────────────── */}
       <Animated.View
         style={[
-          styles.recentChannelsPanel,
-          animatedRecentPanelStyle,
-          {
-            paddingRight: insets.right,
-            paddingTop: insets.top,
-            paddingBottom: insets.bottom,
-          },
+          st.recentPanel,
+          animRecent,
+          { paddingTop: insets.top, paddingRight: insets.right },
         ]}
-        pointerEvents={showRecentChannels ? "auto" : "none"}
+        pointerEvents={showRecentPanel ? "box-none" : "none"}
       >
-        <View style={styles.recentChannelsHeader}>
-          <ThemedText type="body" style={styles.recentChannelsTitle}>
+        <View style={st.recentHeader}>
+          <ThemedText type="h4" style={{ color: "#fff" }}>
             Recent
           </ThemedText>
-          <Pressable
-            onPress={() => setShowRecentChannels(false)}
-            hitSlop={16}
-            focusable={true}
-            accessibilityLabel="Close recent channels"
-            accessibilityRole="button"
-            style={{ padding: 4, borderRadius: BorderRadius.xs }}
-          >
-            <Ionicons name="close" size={20} color="#FFFFFF" />
+          <Pressable onPress={() => setShowRecentPanel(false)} hitSlop={16}>
+            <Ionicons name="close" size={22} color="#fff" />
           </Pressable>
         </View>
-        <ScrollView style={styles.recentChannelsList}>
-          {displayedRecentChannels.map((channel) => (
+        <ScrollView>
+          {displayedRecent.map((ch) => (
             <TVFocusablePressable
-              key={channel.id}
-              baseStyle={styles.recentChannelItem}
-              focusedStyle={styles.recentChannelItemFocused}
-              onPress={() => handleRecentChannelPress(channel.id)}
-              accessibilityLabel={`Play ${channel.name}`}
+              key={ch.id}
+              onPress={() => {
+                onChannelSelect?.(ch.id);
+                setShowRecentPanel(false);
+              }}
+              baseStyle={st.recentItem}
+              focusedStyle={st.recentItemFocused}
+              accessibilityLabel={ch.name}
             >
-              <Image
-                source={channel.logo ? { uri: channel.logo } : placeholderImage}
-                style={styles.recentChannelLogo}
-                contentFit="contain"
-              />
-              <View style={styles.recentChannelInfo}>
+              {ch.logo ? (
+                <Image
+                  source={{ uri: ch.logo }}
+                  style={st.recentLogo}
+                  contentFit="contain"
+                />
+              ) : (
+                <View style={[st.recentLogo, st.recentLogoPlaceholder]}>
+                  <Ionicons
+                    name="tv-outline"
+                    size={20}
+                    color={Colors.dark.textSecondary}
+                  />
+                </View>
+              )}
+              <View style={{ flex: 1, marginLeft: Spacing.sm }}>
                 <ThemedText
-                  type="small"
+                  type="body"
+                  style={{ color: "#fff" }}
                   numberOfLines={1}
-                  style={styles.recentChannelName}
                 >
-                  {channel.name}
+                  {ch.name}
                 </ThemedText>
                 <ThemedText
                   type="caption"
+                  style={{ color: Colors.dark.textSecondary }}
                   numberOfLines={1}
-                  style={styles.recentChannelGroup}
                 >
-                  {channel.group}
+                  {ch.group}
                 </ThemedText>
               </View>
             </TVFocusablePressable>
@@ -1312,6 +1151,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         </ScrollView>
       </Animated.View>
 
+      {/* ── Settings modal ─────────────────────────────────────────── */}
       <Modal
         visible={showSettingsModal}
         transparent
@@ -1319,133 +1159,98 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         onRequestClose={() => setShowSettingsModal(false)}
       >
         <Pressable
-          style={styles.modalOverlay}
+          style={st.modalScrim}
           onPress={() => setShowSettingsModal(false)}
         >
-          <View style={styles.settingsModalContent}>
-            <ThemedText type="h4" style={styles.modalTitle}>
+          <View style={st.modalSheet}>
+            <ThemedText type="h4" style={st.modalTitle}>
               Settings
             </ThemedText>
-
-            <TVFocusablePressable
-              baseStyle={styles.settingsMenuItem}
-              focusedStyle={styles.settingsMenuItemFocused}
-              onPress={() => {
-                setShowSettingsModal(false);
-                setShowQualityModal(true);
-              }}
-              accessibilityLabel="Quality"
-            >
-              <View style={styles.settingsMenuItemLeft}>
-                <Ionicons name="options-outline" size={20} color="#FFFFFF" />
-                <ThemedText type="body" style={styles.settingsMenuItemLabel}>
-                  Quality
-                </ThemedText>
-              </View>
-              <View style={styles.settingsMenuItemRight}>
-                <ThemedText type="small" style={styles.settingsMenuItemValue}>
-                  {getQualityLabel()}
-                </ThemedText>
-                <Ionicons
-                  name="chevron-forward"
-                  size={16}
-                  color={Colors.dark.textSecondary}
-                />
-              </View>
-            </TVFocusablePressable>
-
-            <TVFocusablePressable
-              baseStyle={styles.settingsMenuItem}
-              focusedStyle={styles.settingsMenuItemFocused}
-              onPress={() => {
-                setShowSettingsModal(false);
-                setShowZoomModal(true);
-              }}
-              accessibilityLabel="Aspect Ratio"
-            >
-              <View style={styles.settingsMenuItemLeft}>
-                <Ionicons name="expand-outline" size={20} color="#FFFFFF" />
-                <ThemedText type="body" style={styles.settingsMenuItemLabel}>
-                  Aspect Ratio
-                </ThemedText>
-              </View>
-              <View style={styles.settingsMenuItemRight}>
-                <ThemedText type="small" style={styles.settingsMenuItemValue}>
-                  {getZoomLabel()}
-                </ThemedText>
-                <Ionicons
-                  name="chevron-forward"
-                  size={16}
-                  color={Colors.dark.textSecondary}
-                />
-              </View>
-            </TVFocusablePressable>
-
-            <TVFocusablePressable
-              baseStyle={styles.settingsMenuItem}
-              focusedStyle={styles.settingsMenuItemFocused}
-              onPress={() => {
-                setShowSettingsModal(false);
-                setShowAudioModal(true);
-              }}
-              accessibilityLabel="Audio Track"
-            >
-              <View style={styles.settingsMenuItemLeft}>
-                <Ionicons
-                  name="volume-high-outline"
-                  size={20}
-                  color="#FFFFFF"
-                />
-                <ThemedText type="body" style={styles.settingsMenuItemLabel}>
-                  Audio Track
-                </ThemedText>
-              </View>
-              <View style={styles.settingsMenuItemRight}>
-                <ThemedText type="small" style={styles.settingsMenuItemValue}>
-                  {audioTracks.find((t) => t.id === selectedAudioTrack)
-                    ?.label || "Default"}
-                </ThemedText>
-                <Ionicons
-                  name="chevron-forward"
-                  size={16}
-                  color={Colors.dark.textSecondary}
-                />
-              </View>
-            </TVFocusablePressable>
-
-            <TVFocusablePressable
-              baseStyle={styles.settingsMenuItem}
-              focusedStyle={styles.settingsMenuItemFocused}
-              onPress={() => {
-                setShowSettingsModal(false);
-                setShowSubtitleModal(true);
-              }}
-              accessibilityLabel="Subtitles"
-            >
-              <View style={styles.settingsMenuItemLeft}>
-                <Ionicons name="text-outline" size={20} color="#FFFFFF" />
-                <ThemedText type="body" style={styles.settingsMenuItemLabel}>
-                  Subtitles
-                </ThemedText>
-              </View>
-              <View style={styles.settingsMenuItemRight}>
-                <ThemedText type="small" style={styles.settingsMenuItemValue}>
-                  {subtitlesEnabled
-                    ? subtitleTracks.find((t) => t.id === selectedSubtitleTrack)
-                        ?.label || "On"
-                    : "Off"}
-                </ThemedText>
-                <Ionicons
-                  name="chevron-forward"
-                  size={16}
-                  color={Colors.dark.textSecondary}
-                />
-              </View>
-            </TVFocusablePressable>
+            {[
+              {
+                label: "Quality",
+                value: selectedQuality,
+                icon: "layers-outline" as const,
+                onPress: () => {
+                  setShowSettingsModal(false);
+                  setShowQualityModal(true);
+                },
+                hidden: qualities.length === 0,
+              },
+              {
+                label: "Aspect ratio",
+                value: currentAspectLabel,
+                icon: "scan-outline" as const,
+                onPress: () => {
+                  setShowSettingsModal(false);
+                  setShowAspectModal(true);
+                },
+              },
+              {
+                label: "Audio track",
+                value: selectedAudioTrack
+                  ? (propAudioTracks.find((t) => t.id === selectedAudioTrack)
+                      ?.label ?? "Custom")
+                  : "Default",
+                icon: "volume-medium-outline" as const,
+                onPress: () => {
+                  setShowSettingsModal(false);
+                  setShowAudioModal(true);
+                },
+                hidden: propAudioTracks.length === 0,
+              },
+              {
+                label: "Subtitles",
+                value:
+                  selectedSubtitleTrack !== null
+                    ? (propSubtitleTracks.find(
+                        (t) => t.id === selectedSubtitleTrack,
+                      )?.label ?? "On")
+                    : "Off",
+                icon: "text" as const,
+                onPress: () => {
+                  setShowSettingsModal(false);
+                  setShowSubtitleModal(true);
+                },
+                hidden: propSubtitleTracks.length === 0,
+              },
+            ]
+              .filter((item) => !item.hidden)
+              .map((item) => (
+                <TVFocusablePressable
+                  key={item.label}
+                  onPress={item.onPress}
+                  baseStyle={st.settingsRow}
+                  focusedStyle={st.settingsRowFocused}
+                >
+                  <Ionicons
+                    name={item.icon}
+                    size={22}
+                    color={Colors.dark.textSecondary}
+                    style={{ marginRight: Spacing.md }}
+                  />
+                  <ThemedText type="body" style={{ color: "#fff", flex: 1 }}>
+                    {item.label}
+                  </ThemedText>
+                  <ThemedText
+                    type="small"
+                    style={{ color: Colors.dark.textSecondary }}
+                  >
+                    {item.value}
+                  </ThemedText>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={16}
+                    color={Colors.dark.textSecondary}
+                    style={{ marginLeft: 4 }}
+                  />
+                </TVFocusablePressable>
+              ))}
           </View>
         </Pressable>
       </Modal>
 
+      {/* ── Quality modal ──────────────────────────────────────────── */}
       <Modal
         visible={showQualityModal}
         transparent
@@ -1453,31 +1258,24 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         onRequestClose={() => setShowQualityModal(false)}
       >
         <Pressable
-          style={styles.modalOverlay}
+          style={st.modalScrim}
           onPress={() => setShowQualityModal(false)}
         >
-          <View style={styles.modalContent}>
-            <ThemedText type="h4" style={styles.modalTitle}>
-              Video Quality
+          <View style={st.modalSheet}>
+            <ThemedText type="h4" style={st.modalTitle}>
+              Quality
             </ThemedText>
             <TVFocusablePressable
               onPress={() => handleQualitySelect("auto")}
               baseStyle={[
-                styles.modalOption,
-                selectedQuality === "auto" && styles.modalOptionActive,
+                st.optionRow,
+                selectedQuality === "auto" && st.optionRowActive,
               ]}
-              focusedStyle={styles.modalOptionFocused}
-              accessibilityLabel="Auto quality"
+              focusedStyle={st.optionRowFocused}
             >
-              <View>
-                <ThemedText type="body">Auto</ThemedText>
-                <ThemedText
-                  type="caption"
-                  style={{ color: Colors.dark.textSecondary }}
-                >
-                  Adjusts to your network
-                </ThemedText>
-              </View>
+              <ThemedText type="body" style={{ color: "#fff", flex: 1 }}>
+                Auto
+              </ThemedText>
               {selectedQuality === "auto" ? (
                 <Ionicons
                   name="checkmark"
@@ -1486,31 +1284,32 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 />
               ) : null}
             </TVFocusablePressable>
-            {qualities.map((quality) => (
+            {qualities.map((q) => (
               <TVFocusablePressable
-                key={quality.label}
-                onPress={() => handleQualitySelect(quality.label)}
+                key={q.label}
+                onPress={() => handleQualitySelect(q)}
                 baseStyle={[
-                  styles.modalOption,
-                  selectedQuality === quality.label && styles.modalOptionActive,
+                  st.optionRow,
+                  selectedQuality === q.label && st.optionRowActive,
                 ]}
-                focusedStyle={styles.modalOptionFocused}
-                accessibilityLabel={quality.resolution}
+                focusedStyle={st.optionRowFocused}
               >
-                <View>
-                  <ThemedText type="body">{quality.resolution}</ThemedText>
-                  {quality.bitrate ? (
+                <View style={{ flex: 1 }}>
+                  <ThemedText type="body" style={{ color: "#fff" }}>
+                    {q.label}
+                  </ThemedText>
+                  {q.bitrate ? (
                     <ThemedText
                       type="caption"
                       style={{ color: Colors.dark.textSecondary }}
                     >
-                      {quality.bitrate >= 1000000
-                        ? `${(quality.bitrate / 1000000).toFixed(1)} Mbps`
-                        : `${Math.round(quality.bitrate / 1000)} kbps`}
+                      {q.bitrate >= 1_000_000
+                        ? `${(q.bitrate / 1_000_000).toFixed(1)} Mbps`
+                        : `${Math.round(q.bitrate / 1000)} kbps`}
                     </ThemedText>
                   ) : null}
                 </View>
-                {selectedQuality === quality.label ? (
+                {selectedQuality === q.label ? (
                   <Ionicons
                     name="checkmark"
                     size={20}
@@ -1523,49 +1322,44 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         </Pressable>
       </Modal>
 
+      {/* ── Aspect ratio modal ─────────────────────────────────────── */}
       <Modal
-        visible={showZoomModal}
+        visible={showAspectModal}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowZoomModal(false)}
+        onRequestClose={() => setShowAspectModal(false)}
       >
         <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowZoomModal(false)}
+          style={st.modalScrim}
+          onPress={() => setShowAspectModal(false)}
         >
-          <View style={styles.modalContent}>
-            <ThemedText type="h4" style={styles.modalTitle}>
+          <View style={st.modalSheet}>
+            <ThemedText type="h4" style={st.modalTitle}>
               Aspect Ratio
             </ThemedText>
-            {CONTENT_FIT_OPTIONS.map((option) => (
+            {CONTENT_FIT_OPTIONS.map((opt) => (
               <TVFocusablePressable
-                key={option.value}
-                onPress={() => handleZoomSelect(option.value)}
+                key={opt.value}
+                onPress={() => {
+                  setContentFit(opt.value);
+                  setShowAspectModal(false);
+                }}
                 baseStyle={[
-                  styles.modalOption,
-                  contentFit === option.value && styles.modalOptionActive,
+                  st.optionRow,
+                  contentFit === opt.value && st.optionRowActive,
                 ]}
-                focusedStyle={styles.modalOptionFocused}
-                accessibilityLabel={option.label}
+                focusedStyle={st.optionRowFocused}
               >
-                <View style={styles.zoomOptionContent}>
-                  <Ionicons
-                    name={option.icon as any}
-                    size={20}
-                    color="#FFFFFF"
-                    style={{ marginRight: 12 }}
-                  />
-                  <View>
-                    <ThemedText type="body">{option.label}</ThemedText>
-                    <ThemedText
-                      type="caption"
-                      style={{ color: Colors.dark.textSecondary }}
-                    >
-                      {option.description}
-                    </ThemedText>
-                  </View>
-                </View>
-                {contentFit === option.value ? (
+                <Ionicons
+                  name={opt.icon as any}
+                  size={22}
+                  color={Colors.dark.textSecondary}
+                  style={{ marginRight: Spacing.md }}
+                />
+                <ThemedText type="body" style={{ color: "#fff", flex: 1 }}>
+                  {opt.label}
+                </ThemedText>
+                {contentFit === opt.value ? (
                   <Ionicons
                     name="checkmark"
                     size={20}
@@ -1578,6 +1372,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         </Pressable>
       </Modal>
 
+      {/* ── Audio modal ────────────────────────────────────────────── */}
       <Modal
         visible={showAudioModal}
         transparent
@@ -1585,27 +1380,48 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         onRequestClose={() => setShowAudioModal(false)}
       >
         <Pressable
-          style={styles.modalOverlay}
+          style={st.modalScrim}
           onPress={() => setShowAudioModal(false)}
         >
-          <View style={styles.modalContent}>
-            <ThemedText type="h4" style={styles.modalTitle}>
+          <View style={st.modalSheet}>
+            <ThemedText type="h4" style={st.modalTitle}>
               Audio Track
             </ThemedText>
-            {audioTracks.length > 0 ? (
-              audioTracks.map((track) => (
+            {propAudioTracks.length === 0 ? (
+              <View style={st.emptyState}>
+                <Ionicons
+                  name="volume-mute-outline"
+                  size={32}
+                  color={Colors.dark.textSecondary}
+                />
+                <ThemedText
+                  type="small"
+                  style={{
+                    color: Colors.dark.textSecondary,
+                    marginTop: Spacing.sm,
+                  }}
+                >
+                  No additional audio tracks
+                </ThemedText>
+              </View>
+            ) : (
+              propAudioTracks.map((track) => (
                 <TVFocusablePressable
                   key={track.id}
-                  onPress={() => handleAudioTrackSelect(track.id)}
+                  onPress={() => {
+                    setSelectedAudioTrack(track.id);
+                    setShowAudioModal(false);
+                  }}
                   baseStyle={[
-                    styles.modalOption,
-                    selectedAudioTrack === track.id && styles.modalOptionActive,
+                    st.optionRow,
+                    selectedAudioTrack === track.id && st.optionRowActive,
                   ]}
-                  focusedStyle={styles.modalOptionFocused}
-                  accessibilityLabel={track.label}
+                  focusedStyle={st.optionRowFocused}
                 >
-                  <View>
-                    <ThemedText type="body">{track.label}</ThemedText>
+                  <View style={{ flex: 1 }}>
+                    <ThemedText type="body" style={{ color: "#fff" }}>
+                      {track.label}
+                    </ThemedText>
                     <ThemedText
                       type="caption"
                       style={{ color: Colors.dark.textSecondary }}
@@ -1622,22 +1438,12 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                   ) : null}
                 </TVFocusablePressable>
               ))
-            ) : (
-              <View style={styles.emptyState}>
-                <Ionicons
-                  name="volume-mute-outline"
-                  size={32}
-                  color={Colors.dark.textSecondary}
-                />
-                <ThemedText type="body" style={styles.emptyStateText}>
-                  No additional audio tracks
-                </ThemedText>
-              </View>
             )}
           </View>
         </Pressable>
       </Modal>
 
+      {/* ── Subtitle modal ─────────────────────────────────────────── */}
       <Modal
         visible={showSubtitleModal}
         transparent
@@ -1645,24 +1451,28 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         onRequestClose={() => setShowSubtitleModal(false)}
       >
         <Pressable
-          style={styles.modalOverlay}
+          style={st.modalScrim}
           onPress={() => setShowSubtitleModal(false)}
         >
-          <View style={styles.modalContent}>
-            <ThemedText type="h4" style={styles.modalTitle}>
+          <View style={st.modalSheet}>
+            <ThemedText type="h4" style={st.modalTitle}>
               Subtitles
             </ThemedText>
             <TVFocusablePressable
-              onPress={() => handleSubtitleTrackSelect(null)}
+              onPress={() => {
+                setSelectedSubtitleTrack(null);
+                setShowSubtitleModal(false);
+              }}
               baseStyle={[
-                styles.modalOption,
-                !subtitlesEnabled && styles.modalOptionActive,
+                st.optionRow,
+                selectedSubtitleTrack === null && st.optionRowActive,
               ]}
-              focusedStyle={styles.modalOptionFocused}
-              accessibilityLabel="Subtitles off"
+              focusedStyle={st.optionRowFocused}
             >
-              <ThemedText type="body">Off</ThemedText>
-              {!subtitlesEnabled ? (
+              <ThemedText type="body" style={{ color: "#fff", flex: 1 }}>
+                Off
+              </ThemedText>
+              {selectedSubtitleTrack === null ? (
                 <Ionicons
                   name="checkmark"
                   size={20}
@@ -1670,49 +1480,39 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 />
               ) : null}
             </TVFocusablePressable>
-            {subtitleTracks.length > 0 ? (
-              subtitleTracks.map((track) => (
-                <TVFocusablePressable
-                  key={track.id}
-                  onPress={() => handleSubtitleTrackSelect(track.id)}
-                  baseStyle={[
-                    styles.modalOption,
-                    selectedSubtitleTrack === track.id &&
-                      styles.modalOptionActive,
-                  ]}
-                  focusedStyle={styles.modalOptionFocused}
-                  accessibilityLabel={track.label}
-                >
-                  <View>
-                    <ThemedText type="body">{track.label}</ThemedText>
-                    <ThemedText
-                      type="caption"
-                      style={{ color: Colors.dark.textSecondary }}
-                    >
-                      {track.language}
-                    </ThemedText>
-                  </View>
-                  {selectedSubtitleTrack === track.id ? (
-                    <Ionicons
-                      name="checkmark"
-                      size={20}
-                      color={Colors.dark.primary}
-                    />
-                  ) : null}
-                </TVFocusablePressable>
-              ))
-            ) : (
-              <View style={styles.emptyState}>
-                <Ionicons
-                  name="text-outline"
-                  size={32}
-                  color={Colors.dark.textSecondary}
-                />
-                <ThemedText type="body" style={styles.emptyStateText}>
-                  No subtitles available
-                </ThemedText>
-              </View>
-            )}
+            {propSubtitleTracks.map((track) => (
+              <TVFocusablePressable
+                key={track.id}
+                onPress={() => {
+                  setSelectedSubtitleTrack(track.id);
+                  setShowSubtitleModal(false);
+                }}
+                baseStyle={[
+                  st.optionRow,
+                  selectedSubtitleTrack === track.id && st.optionRowActive,
+                ]}
+                focusedStyle={st.optionRowFocused}
+              >
+                <View style={{ flex: 1 }}>
+                  <ThemedText type="body" style={{ color: "#fff" }}>
+                    {track.label}
+                  </ThemedText>
+                  <ThemedText
+                    type="caption"
+                    style={{ color: Colors.dark.textSecondary }}
+                  >
+                    {track.language}
+                  </ThemedText>
+                </View>
+                {selectedSubtitleTrack === track.id ? (
+                  <Ionicons
+                    name="checkmark"
+                    size={20}
+                    color={Colors.dark.primary}
+                  />
+                ) : null}
+              </TVFocusablePressable>
+            ))}
           </View>
         </Pressable>
       </Modal>
@@ -1720,178 +1520,233 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   );
 }, arePropsEqual);
 
-const styles = StyleSheet.create({
-  container: {
+// ── Styles ────────────────────────────────────────────────────────────────────
+
+const st = StyleSheet.create({
+  root: {
     flex: 1,
-    backgroundColor: "#000000",
+    backgroundColor: "#000",
   },
-  videoContainer: {
+  videoWrap: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: "#000",
   },
   video: {
     ...StyleSheet.absoluteFillObject,
   },
-  loadingOverlay: {
+
+  // Overlays
+  centerOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.85)",
-    zIndex: 9999,
-    elevation: 9999,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    zIndex: 10,
   },
   loadingText: {
+    color: "#fff",
     marginTop: Spacing.md,
-    color: "#FFFFFF",
   },
-  errorOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: "center",
+  errorBox: {
     alignItems: "center",
-  },
-  errorContent: {
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.85)",
+    backgroundColor: "rgba(0,0,0,0.9)",
     padding: Spacing.xl,
     borderRadius: BorderRadius.lg,
+    maxWidth: 320,
   },
   errorText: {
-    marginTop: Spacing.md,
     color: Colors.dark.error,
     textAlign: "center",
-    paddingHorizontal: Spacing.xl,
+    marginTop: Spacing.md,
   },
-  retryButton: {
+  retryBtn: {
     marginTop: Spacing.lg,
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.lg,
-    backgroundColor: Colors.dark.primary + "30",
     borderRadius: BorderRadius.sm,
     borderWidth: 2,
-    borderColor: "transparent",
-  },
-  retryButtonFocused: {
     borderColor: Colors.dark.primary,
-    backgroundColor: Colors.dark.primary + "50",
+    backgroundColor: Colors.dark.primary + "20",
   },
+  retryBtnFocused: {
+    backgroundColor: Colors.dark.primary + "50",
+    transform: [{ scale: 1.06 }],
+  },
+
+  // Seek flash
+  seekFlash: {
+    position: "absolute",
+    top: "35%",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.55)",
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    zIndex: 20,
+  },
+  seekFlashLeft: { left: "10%" },
+  seekFlashRight: { right: "10%" },
+  seekFlashText: { color: "#fff", marginTop: 4 },
+
+  // Lock
+  lockOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.65)",
+    zIndex: 30,
+  },
+  lockBox: {
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.85)",
+    padding: Spacing.xl,
+    borderRadius: BorderRadius.md,
+  },
+  unlockBtn: {
+    marginTop: Spacing.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 2,
+    borderColor: Colors.dark.primary,
+  },
+
+  // Controls overlay
   controlsOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: "space-between",
-    backgroundColor: "rgba(0,0,0,0.4)",
-    zIndex: 10,
-    elevation: 10,
+    backgroundColor: "rgba(0,0,0,0.38)",
+    zIndex: 15,
   },
-  topControls: {
+
+  // Top bar
+  topBar: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "flex-start",
+    paddingBottom: Spacing.sm,
   },
-  topLeftControls: {
+  topLeft: {
     flexDirection: "row",
     alignItems: "center",
+    minWidth: 48,
   },
-  topRightControls: {
+  topCenter: {
+    flex: 1,
+    alignItems: "center",
+    paddingHorizontal: Spacing.sm,
+    paddingTop: Spacing.xs,
+  },
+  topRight: {
     flexDirection: "row",
     alignItems: "center",
+    minWidth: 48,
+    justifyContent: "flex-end",
   },
-  controlButton: {
+  titleText: {
+    color: "#fff",
+    textAlign: "center",
+  },
+  subtitleText: {
+    color: Colors.dark.textSecondary,
+    marginTop: 2,
+    textAlign: "center",
+  },
+
+  // Icon buttons
+  iconBtn: {
     padding: Spacing.sm,
     borderRadius: BorderRadius.xs,
     borderWidth: 2,
     borderColor: "transparent",
   },
-  controlButtonFocused: {
+  iconBtnFocused: {
     borderColor: Colors.dark.primary,
-    backgroundColor: Colors.dark.primary + "50",
-    transform: [{ scale: 1.15 }],
+    backgroundColor: Colors.dark.primary + "40",
+    transform: [{ scale: 1.1 }],
   },
-  titleContainer: {
-    flex: 1,
-    alignItems: "center",
-    paddingHorizontal: Spacing.md,
-    paddingTop: Spacing.sm,
-  },
-  title: {
-    color: "#FFFFFF",
-    textAlign: "center",
-  },
-  subtitle: {
-    color: Colors.dark.textSecondary,
-    marginTop: 2,
-    textAlign: "center",
-  },
-  centerControls: {
+
+  // Center transport
+  centerRow: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    gap: Spacing.xl,
+    gap: Spacing["2xl"],
   },
-  playButton: {
+  playBtn: {
     backgroundColor: Colors.dark.primary,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 3,
     borderColor: "transparent",
   },
-  playButtonFocused: {
-    borderColor: "#FFFFFF",
-    transform: [{ scale: 1.1 }],
+  playBtnFocused: {
+    borderColor: "#fff",
+    transform: [{ scale: 1.08 }],
   },
-  navButton: {
+  navBtn: {
     backgroundColor: "rgba(255,255,255,0.15)",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
     borderColor: "transparent",
   },
-  navButtonFocused: {
+  navBtnFocused: {
     borderColor: Colors.dark.primary,
-    backgroundColor: "rgba(255,255,255,0.3)",
-    transform: [{ scale: 1.1 }],
+    backgroundColor: "rgba(255,255,255,0.28)",
+    transform: [{ scale: 1.08 }],
   },
-  bottomControls: {},
-  progressContainer: {
+
+  // Bottom bar
+  bottomBar: {
+    paddingTop: Spacing.sm,
+  },
+  progressRow: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: Spacing.sm,
   },
-  progressBar: {
+  timeText: {
+    color: "#fff",
+    minWidth: 48,
+    textAlign: "center",
+  },
+  seekBar: {
     flex: 1,
+    paddingVertical: 10, // larger hit target
+    marginHorizontal: Spacing.sm,
+  },
+  seekBarTrack: {
     height: 4,
     backgroundColor: "rgba(255,255,255,0.3)",
     borderRadius: 2,
-    marginHorizontal: Spacing.sm,
   },
-  progressFill: {
+  seekBarFill: {
     height: "100%",
     backgroundColor: Colors.dark.primary,
     borderRadius: 2,
   },
-  timeText: {
-    color: "#FFFFFF",
-    minWidth: 50,
-    textAlign: "center",
+  seekThumb: {
+    position: "absolute",
+    top: -5,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: Colors.dark.primary,
+    marginLeft: -7,
   },
-  bottomControlsRow: {
+  bottomRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  bottomLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-  },
-  bottomRight: {
+  badgeRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.xs,
   },
-  liveIndicator: {
+  liveBadge: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.dark.error,
@@ -1903,14 +1758,15 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#fff",
     marginRight: 4,
   },
   liveText: {
-    color: "#FFFFFF",
-    fontWeight: "600",
+    color: "#fff",
+    fontWeight: "700",
+    letterSpacing: 0.5,
   },
-  badge: {
+  drmBadge: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "rgba(255,255,255,0.1)",
@@ -1918,102 +1774,50 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: BorderRadius.xs,
   },
-  badgeText: {
-    color: "#FFFFFF",
-    marginLeft: 4,
+  bottomRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
   },
-  settingsButton: {
+  toolBtn: {
     padding: Spacing.sm,
+    borderRadius: BorderRadius.xs,
     backgroundColor: "rgba(255,255,255,0.1)",
-    borderRadius: BorderRadius.sm,
     borderWidth: 2,
     borderColor: "transparent",
   },
-  settingsButtonActive: {
+  toolBtnActive: {
     backgroundColor: Colors.dark.primary + "25",
     borderColor: Colors.dark.primary,
   },
-  settingsButtonFocused: {
+  toolBtnFocused: {
     borderColor: Colors.dark.primary,
-    backgroundColor: "rgba(255,255,255,0.35)",
-    transform: [{ scale: 1.15 }],
+    backgroundColor: "rgba(255,255,255,0.28)",
+    transform: [{ scale: 1.12 }],
   },
-  seekIndicator: {
-    position: "absolute",
-    top: "50%",
-    transform: [{ translateY: -40 }],
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.6)",
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.md,
-  },
-  seekIndicatorLeft: {
-    left: "20%",
-  },
-  seekIndicatorRight: {
-    right: "20%",
-  },
-  seekIndicatorText: {
-    color: "#FFFFFF",
-    marginTop: 4,
-  },
-  lockIndicator: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.6)",
-  },
-  lockIndicatorContent: {
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.8)",
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.lg,
-    borderRadius: BorderRadius.md,
-  },
-  lockIndicatorText: {
-    color: "#FFFFFF",
-    marginTop: Spacing.sm,
-  },
-  unlockButton: {
-    marginTop: Spacing.md,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-    backgroundColor: Colors.dark.primary + "30",
-    borderRadius: BorderRadius.sm,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  unlockButtonFocused: {
-    borderColor: Colors.dark.primary,
-    backgroundColor: Colors.dark.primary + "50",
-  },
-  recentChannelsPanel: {
+
+  // Recent channels panel
+  recentPanel: {
     position: "absolute",
     right: 0,
     top: 0,
     bottom: 0,
-    width: 260,
-    backgroundColor: "rgba(0,0,0,0.95)",
-    paddingTop: Spacing.lg,
+    width: 280,
+    backgroundColor: "rgba(10,10,10,0.97)",
+    zIndex: 25,
+    borderLeftWidth: 1,
+    borderLeftColor: "rgba(255,255,255,0.08)",
   },
-  recentChannelsHeader: {
+  recentHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: Spacing.md,
-    paddingBottom: Spacing.md,
+    padding: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.1)",
+    borderBottomColor: "rgba(255,255,255,0.08)",
+    marginTop: Spacing.md,
   },
-  recentChannelsTitle: {
-    color: "#FFFFFF",
-    fontWeight: "600",
-  },
-  recentChannelsList: {
-    flex: 1,
-  },
-  recentChannelItem: {
+  recentItem: {
     flexDirection: "row",
     alignItems: "center",
     padding: Spacing.md,
@@ -2023,115 +1827,75 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
     borderRadius: BorderRadius.xs,
   },
-  recentChannelItemFocused: {
+  recentItemFocused: {
     borderColor: Colors.dark.primary,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    backgroundColor: "rgba(255,255,255,0.07)",
   },
-  recentChannelLogo: {
-    width: 40,
-    height: 40,
+  recentLogo: {
+    width: 44,
+    height: 44,
     borderRadius: BorderRadius.xs,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
-  recentChannelInfo: {
-    flex: 1,
-    marginLeft: Spacing.sm,
-  },
-  recentChannelName: {
-    color: "#FFFFFF",
-    fontWeight: "500",
-  },
-  recentChannelGroup: {
-    color: Colors.dark.textSecondary,
-    marginTop: 2,
-  },
-  modalOverlay: {
-    flex: 1,
+  recentLogoPlaceholder: {
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.8)",
   },
-  modalContent: {
-    width: "80%",
-    maxWidth: 360,
-    maxHeight: "70%",
-    backgroundColor: Colors.dark.backgroundDefault,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.lg,
+
+  // Modals
+  modalScrim: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.72)",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  settingsModalContent: {
-    width: "80%",
+  modalSheet: {
+    width: "85%",
     maxWidth: 400,
+    maxHeight: "75%",
     backgroundColor: Colors.dark.backgroundDefault,
     borderRadius: BorderRadius.md,
     padding: Spacing.lg,
   },
   modalTitle: {
-    color: "#FFFFFF",
+    color: "#fff",
     marginBottom: Spacing.lg,
     textAlign: "center",
   },
-  modalOption: {
+  settingsRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.07)",
+    borderWidth: 2,
+    borderColor: "transparent",
+    borderRadius: BorderRadius.xs,
+  },
+  settingsRowFocused: {
+    borderColor: Colors.dark.primary,
+    backgroundColor: Colors.dark.primary + "20",
+  },
+  optionRow: {
+    flexDirection: "row",
     alignItems: "center",
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.sm,
     borderRadius: BorderRadius.sm,
     borderWidth: 2,
     borderColor: "transparent",
+    marginBottom: 2,
   },
-  modalOptionActive: {
-    backgroundColor: Colors.dark.primary + "20",
+  optionRowActive: {
+    backgroundColor: Colors.dark.primary + "18",
   },
-  modalOptionFocused: {
+  optionRowFocused: {
     borderColor: Colors.dark.primary,
     backgroundColor: Colors.dark.primary + "30",
-    transform: [{ scale: 1.03 }],
-  },
-  zoomOptionContent: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  settingsMenuItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.1)",
-    borderWidth: 2,
-    borderColor: "transparent",
-    borderRadius: BorderRadius.xs,
-  },
-  settingsMenuItemFocused: {
-    borderColor: Colors.dark.primary,
-    backgroundColor: Colors.dark.primary + "30",
-    transform: [{ scale: 1.03 }],
-  },
-  settingsMenuItemLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  settingsMenuItemLabel: {
-    color: "#FFFFFF",
-    marginLeft: Spacing.md,
-  },
-  settingsMenuItemRight: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  settingsMenuItemValue: {
-    color: Colors.dark.textSecondary,
-    marginRight: Spacing.xs,
+    transform: [{ scale: 1.02 }],
   },
   emptyState: {
     alignItems: "center",
     paddingVertical: Spacing.xl,
-  },
-  emptyStateText: {
-    color: Colors.dark.textSecondary,
-    marginTop: Spacing.md,
-    textAlign: "center",
   },
 });
