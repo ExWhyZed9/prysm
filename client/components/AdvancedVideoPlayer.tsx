@@ -16,6 +16,7 @@ import {
   ViewStyle,
   StatusBar,
   PermissionsAndroid,
+  findNodeHandle,
 } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
@@ -47,6 +48,13 @@ import {
 
 const isTV = Platform.isTV;
 
+// ── Constants ────────────────────────────────────────────────────────────────
+
+const SEEK_MS = 10_000;
+// On TV controls stay visible until the user presses Back/Menu to hide them.
+// On phone/tablet they auto-hide after CONTROLS_TIMEOUT_MS of inactivity.
+const CONTROLS_TIMEOUT_MS = 4_000;
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatTime(ms: number): string {
@@ -60,9 +68,6 @@ function formatTime(ms: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-const SEEK_MS = 10_000; // 10 s per double-tap / button
-const CONTROLS_TIMEOUT_MS = 4000;
-
 // ── TVFocusablePressable ──────────────────────────────────────────────────────
 
 function TVFocusablePressable({
@@ -75,6 +80,11 @@ function TVFocusablePressable({
   hasTVPreferredFocus,
   accessibilityLabel,
   accessibilityRole = "button" as const,
+  viewRef,
+  nextFocusUp,
+  nextFocusDown,
+  nextFocusLeft,
+  nextFocusRight,
 }: {
   onPress: () => void;
   baseStyle: any;
@@ -85,13 +95,23 @@ function TVFocusablePressable({
   hasTVPreferredFocus?: boolean;
   accessibilityLabel?: string;
   accessibilityRole?: "button" | "link";
+  viewRef?: React.RefObject<any>;
+  nextFocusUp?: number | null;
+  nextFocusDown?: number | null;
+  nextFocusLeft?: number | null;
+  nextFocusRight?: number | null;
 }) {
   const [focused, setFocused] = useState(false);
   const tvProps: any = {};
   if (hasTVPreferredFocus) tvProps.hasTVPreferredFocus = true;
+  if (nextFocusUp != null) tvProps.nextFocusUp = nextFocusUp;
+  if (nextFocusDown != null) tvProps.nextFocusDown = nextFocusDown;
+  if (nextFocusLeft != null) tvProps.nextFocusLeft = nextFocusLeft;
+  if (nextFocusRight != null) tvProps.nextFocusRight = nextFocusRight;
   const base = Array.isArray(baseStyle) ? baseStyle : [baseStyle];
   return (
     <Pressable
+      ref={viewRef}
       onPress={onPress}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
@@ -107,7 +127,7 @@ function TVFocusablePressable({
   );
 }
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface DRMConfig {
   type: "widevine" | "fairplay" | "playready" | "clearkey";
@@ -159,8 +179,6 @@ export interface AdvancedVideoPlayerProps {
   isLive?: boolean;
 }
 
-// ── Content-fit cycling ───────────────────────────────────────────────────────
-
 type ContentFit = "contain" | "cover" | "fill";
 const CONTENT_FIT_OPTIONS: {
   label: string;
@@ -173,19 +191,6 @@ const CONTENT_FIT_OPTIONS: {
 ];
 
 // ── Component ─────────────────────────────────────────────────────────────────
-
-function arePropsEqual(
-  prev: AdvancedVideoPlayerProps,
-  next: AdvancedVideoPlayerProps,
-) {
-  return (
-    prev.source === next.source &&
-    prev.title === next.title &&
-    prev.subtitle === next.subtitle &&
-    prev.isFavorite === next.isFavorite &&
-    prev.isLive === next.isLive
-  );
-}
 
 export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   source,
@@ -213,14 +218,32 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   const insets = useSafeAreaInsets();
   const { playerControls, isUltraWide, width } = useResponsive();
 
-  // ── Refs ───────────────────────────────────────────────────────────────────
+  // ── Refs ─────────────────────────────────────────────────────────────────
   const tvPlayerRef = useRef<any>(null);
-  const controlsTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Track whether the native view has mounted and is ready to receive commands
+  const nativeReadyRef = useRef(false);
+  const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Ref mirror of showControls — always in sync, read by TVEventHandler closure
   const showControlsRef = useRef(false);
-  const resetTimeoutRef = useRef<() => void>(() => {});
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  const [showControls, setShowControls] = useState(false);
+  // TV focus routing — refs for nextFocus wiring between the three control rows
+  const backBtnRef = useRef<any>(null);
+  const playPauseBtnRef = useRef<any>(null);
+  const seekBarRef = useRef<any>(null);
+  const firstToolBtnRef = useRef<any>(null);
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  // Controls always start hidden. On TV they appear on the first OK press.
+  // On phone they appear on the first tap.
+  const [showControls, setShowControlsState] = useState(false);
+  const [seekBarFocused, setSeekBarFocused] = useState(false);
+  // Node handles for nextFocus wiring — populated after first layout
+  const [nh, setNh] = useState<{
+    backBtn: number | null;
+    playPause: number | null;
+    seekBar: number | null;
+    firstTool: number | null;
+  }>({ backBtn: null, playPause: null, seekBar: null, firstTool: null });
   const [isPlaying, setIsPlaying] = useState(autoPlay);
   const [isLoading, setIsLoading] = useState(true);
   const [isBuffering, setIsBuffering] = useState(false);
@@ -259,7 +282,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   const qualities =
     detectedQualities.length > 0 ? detectedQualities : propQualities;
 
-  // ── Animations ─────────────────────────────────────────────────────────────
+  // ── Animations ────────────────────────────────────────────────────────────
   const controlsOpacity = useSharedValue(0);
   const recentTranslateX = useSharedValue(280);
   const seekFlashOpacity = useSharedValue(0);
@@ -276,84 +299,96 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   }));
   const animLock = useAnimatedStyle(() => ({ opacity: lockOpacity.value }));
 
-  // ── Controls timeout ───────────────────────────────────────────────────────
-  const resetTimeout = useCallback(() => {
+  // ── Controls show/hide ────────────────────────────────────────────────────
+
+  // Single source of truth for setting controls visibility.
+  // Drives both the state (for conditional rendering / focusability) and animation.
+  const setShowControls = useCallback(
+    (visible: boolean) => {
+      showControlsRef.current = visible;
+      setShowControlsState(visible);
+      controlsOpacity.value = withTiming(visible ? 1 : 0, { duration: 200 });
+    },
+    [controlsOpacity],
+  );
+
+  // Start/reset the auto-hide timer (phone only — on TV controls stay until dismissed).
+  const scheduleHide = useCallback(() => {
     if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
-    if (isTV) return;
+    if (isTV) return; // TV: controls stay visible, dismissed via Back/Menu
     controlsTimerRef.current = setTimeout(() => {
+      // Don't hide while a modal is open or while paused
       if (
-        !showSettingsModal &&
-        !showQualityModal &&
-        !showAspectModal &&
-        !showAudioModal &&
-        !showSubtitleModal &&
-        isPlaying
-      ) {
-        setShowControls(false);
-      }
+        showSettingsModal ||
+        showQualityModal ||
+        showAspectModal ||
+        showAudioModal ||
+        showSubtitleModal
+      )
+        return;
+      setShowControls(false);
     }, CONTROLS_TIMEOUT_MS);
   }, [
-    isPlaying,
     showSettingsModal,
     showQualityModal,
     showAspectModal,
     showAudioModal,
     showSubtitleModal,
+    setShowControls,
   ]);
 
+  const showAndScheduleHide = useCallback(() => {
+    setShowControls(true);
+    scheduleHide();
+  }, [setShowControls, scheduleHide]);
+
+  // Keep ref up-to-date so the TVEventHandler closure can read it without
+  // needing to be recreated on every render.
+  const scheduleHideRef = useRef(scheduleHide);
+  const showAndScheduleHideRef = useRef(showAndScheduleHide);
   useEffect(() => {
-    resetTimeoutRef.current = resetTimeout;
-  }, [resetTimeout]);
+    scheduleHideRef.current = scheduleHide;
+  }, [scheduleHide]);
   useEffect(() => {
-    showControlsRef.current = showControls;
+    showAndScheduleHideRef.current = showAndScheduleHide;
+  }, [showAndScheduleHide]);
+
+  // ── TV nextFocus node handles ─────────────────────────────────────────────
+  // Computed once after the controls first become visible so the refs are
+  // attached. Allows Android TV to follow a predictable D-pad order:
+  //   Top row  →  Center row (play/pause)  →  Bottom row (seek bar / tools)
+  useEffect(() => {
+    if (!isTV || !showControls) return;
+    // Small delay so the Pressable refs are attached after the animated fade-in
+    const t = setTimeout(() => {
+      setNh({
+        backBtn: findNodeHandle(backBtnRef.current),
+        playPause: findNodeHandle(playPauseBtnRef.current),
+        seekBar: findNodeHandle(seekBarRef.current),
+        firstTool: findNodeHandle(firstToolBtnRef.current),
+      });
+    }, 250);
+    return () => clearTimeout(t);
   }, [showControls]);
 
-  const showControlsWithTimeout = useCallback(() => {
-    setShowControls(true);
-    controlsOpacity.value = withTiming(1, { duration: 200 });
-    resetTimeoutRef.current();
-  }, [controlsOpacity]);
+  // ── Source change ─────────────────────────────────────────────────────────
 
-  const hideControls = useCallback(() => {
-    setShowControls(false);
-    controlsOpacity.value = withTiming(0, { duration: 200 });
-  }, [controlsOpacity]);
-
+  // When the parent changes the source URL (channel switch), propagate it.
   useEffect(() => {
-    if (showControls) {
-      controlsOpacity.value = withTiming(1, { duration: 200 });
-    } else {
-      controlsOpacity.value = withTiming(0, { duration: 200 });
-    }
-  }, [showControls, controlsOpacity]);
+    setCurrentSource(source);
+  }, [source]);
 
+  // ── HLS quality detection ─────────────────────────────────────────────────
   useEffect(() => {
-    if (showRecentPanel) {
-      recentTranslateX.value = withSpring(0, { damping: 20 });
-    } else {
-      recentTranslateX.value = withSpring(280, { damping: 20 });
-    }
-  }, [showRecentPanel, recentTranslateX]);
-
-  useEffect(() => {
-    if (isLocked) {
-      lockOpacity.value = withTiming(1, { duration: 150 });
-    } else {
-      lockOpacity.value = withTiming(0, { duration: 150 });
-    }
-  }, [isLocked, lockOpacity]);
-
-  // ── HLS quality detection ──────────────────────────────────────────────────
-  useEffect(() => {
-    if (!source || !isHLSStream(source)) return;
-    parseHLSQualities(source)
+    if (!currentSource || !isHLSStream(currentSource)) return;
+    parseHLSQualities(currentSource)
       .then((q) => {
         if (q.length > 0) setDetectedQualities(q);
       })
       .catch(() => {});
-  }, [source]);
+  }, [currentSource]);
 
-  // ── Native player load ─────────────────────────────────────────────────────
+  // ── Native player load ────────────────────────────────────────────────────
   const loadSource = useCallback(() => {
     if (!tvPlayerRef.current) return;
     setIsLoading(true);
@@ -368,61 +403,91 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     });
   }, [currentSource, headers, drm, autoPlay]);
 
+  // Run loadSource whenever these values change, but guard on native readiness.
   useEffect(() => {
-    loadSource();
+    if (nativeReadyRef.current) {
+      loadSource();
+    }
+    // nativeReadyRef is not reactive — intentionally omitted from deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSource, headers, drm, autoPlay]);
 
-  const tvPlayerCallbackRef = useCallback((node: any) => {
+  // Native view callback ref — fires when the native view mounts.
+  const nativeViewRef = useCallback((node: any) => {
     (tvPlayerRef as React.MutableRefObject<any>).current = node;
+    if (node && !nativeReadyRef.current) {
+      // The native view just mounted; trigger initial load.
+      nativeReadyRef.current = true;
+      // Slight delay to let the native view fully initialise its surface.
+      setTimeout(() => loadSource(), 50);
+    }
+    // loadSource is stable (useCallback) — safe to include
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Release on unmount
   useEffect(() => {
     return () => {
+      if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
       TvPlayerCommands.release(tvPlayerRef);
     };
   }, []);
 
-  // ── TV D-pad handler ───────────────────────────────────────────────────────
+  // ── TV D-pad handler ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!isTV) return;
     let handler: any = null;
     try {
       const RN = require("react-native");
       const TVHandler = RN.TVEventHandler;
-      if (TVHandler) {
-        handler = new TVHandler();
-        handler.enable({} as any, (_: any, evt: any) => {
-          if (!evt) return;
-          const { eventType } = evt;
-          const visible = showControlsRef.current;
-          if (
-            ["select", "playPause", "up", "down", "left", "right"].includes(
-              eventType,
-            )
-          ) {
-            if (!visible) {
-              setShowControls(true);
-              resetTimeoutRef.current();
-            } else {
-              resetTimeoutRef.current();
-            }
-          } else if (eventType === "menu" || eventType === "back") {
-            if (visible) {
-              setShowControls(false);
-              setShowRecentPanel(false);
-            } else if (onBack) onBack();
+      if (!TVHandler) return;
+      handler = new TVHandler();
+      handler.enable({} as any, (_: any, evt: any) => {
+        if (!evt) return;
+        const { eventType } = evt;
+
+        if (["up", "down", "left", "right", "playPause"].includes(eventType)) {
+          // Directional / play-pause keys always show controls and reset timer
+          if (!showControlsRef.current) {
+            showAndScheduleHideRef.current();
+          } else {
+            scheduleHideRef.current();
           }
-        });
-      }
+        } else if (eventType === "select") {
+          // OK button: if controls are hidden, show them (video keeps playing).
+          // Focus lands on Play/Pause automatically via hasTVPreferredFocus,
+          // so the next OK press will pause/resume via that button's onPress.
+          // If controls are already visible, the focused button handles the
+          // press itself — we just reset the hide timer here.
+          if (!showControlsRef.current) {
+            showAndScheduleHideRef.current();
+          } else {
+            scheduleHideRef.current();
+          }
+        } else if (eventType === "menu" || eventType === "back") {
+          if (showControlsRef.current) {
+            showControlsRef.current = false;
+            setShowControlsState(false);
+            controlsOpacity.value = withTiming(0, { duration: 200 });
+            setShowRecentPanel(false);
+          } else {
+            // Controls already hidden — treat as a navigation back
+            onBack?.();
+          }
+        }
+      });
     } catch (_) {}
     return () => {
       try {
         handler?.disable();
       } catch (_) {}
     };
+    // onBack is stable from the parent; controlsOpacity is a shared value (stable ref).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onBack]);
 
-  // ── Playback actions ───────────────────────────────────────────────────────
+  // ── Playback actions ──────────────────────────────────────────────────────
+
   const handlePlayPause = useCallback(() => {
     if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (isPlaying) {
@@ -430,7 +495,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     } else {
       TvPlayerCommands.play(tvPlayerRef);
     }
-    resetTimeoutRef.current();
+    scheduleHideRef.current();
   }, [isPlaying]);
 
   const handleSeek = useCallback(
@@ -439,7 +504,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
       if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       const newPos = Math.max(0, Math.min(positionMs + offsetMs, durationMs));
       TvPlayerCommands.seekTo(tvPlayerRef, newPos);
-      resetTimeoutRef.current();
+      scheduleHideRef.current();
     },
     [positionMs, durationMs, isLive],
   );
@@ -448,7 +513,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     (pct: number) => {
       if (isLive || durationMs <= 0) return;
       TvPlayerCommands.seekTo(tvPlayerRef, Math.floor(pct * durationMs));
-      resetTimeoutRef.current();
+      scheduleHideRef.current();
     },
     [durationMs, isLive],
   );
@@ -464,7 +529,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         if (q.url) setCurrentSource(q.url);
       }
       setShowQualityModal(false);
-      resetTimeoutRef.current();
+      scheduleHideRef.current();
     },
     [source],
   );
@@ -474,8 +539,6 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     if (isBackgroundPlaying) {
       TvPlayerCommands.disableBackgroundAudio(tvPlayerRef);
     } else {
-      // Android 13+ (API 33) requires POST_NOTIFICATIONS at runtime for the
-      // media playback notification posted by MediaSessionService.
       if (
         Platform.OS === "android" &&
         parseInt(String(Platform.Version), 10) >= 33
@@ -487,18 +550,27 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
       }
       TvPlayerCommands.enableBackgroundAudio(tvPlayerRef);
     }
-    resetTimeoutRef.current();
+    scheduleHideRef.current();
   }, [isBackgroundPlaying]);
 
-  // ── Gestures ───────────────────────────────────────────────────────────────
+  // ── Animations: panels ────────────────────────────────────────────────────
+
+  useEffect(() => {
+    recentTranslateX.value = withSpring(showRecentPanel ? 0 : 280, {
+      damping: 20,
+    });
+  }, [showRecentPanel, recentTranslateX]);
+
+  useEffect(() => {
+    lockOpacity.value = withTiming(isLocked ? 1 : 0, { duration: 150 });
+  }, [isLocked, lockOpacity]);
+
+  // ── Gestures ──────────────────────────────────────────────────────────────
+
   const tapGesture = Gesture.Tap()
     .numberOfTaps(1)
     .onEnd(() => {
-      runOnJS(
-        showControlsRef.current
-          ? resetTimeoutRef.current
-          : showControlsWithTimeout,
-      )();
+      runOnJS(showControlsRef.current ? scheduleHide : showAndScheduleHide)();
     });
 
   const doubleTapGesture = Gesture.Tap()
@@ -506,8 +578,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     .onEnd((evt) => {
       if (isLive) return;
       const dir = evt.x < width / 2 ? "backward" : "forward";
-      const offset = dir === "backward" ? -SEEK_MS : SEEK_MS;
-      runOnJS(handleSeek)(offset);
+      runOnJS(handleSeek)(dir === "backward" ? -SEEK_MS : SEEK_MS);
       if (!isTV)
         runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Medium);
       runOnJS(setSeekFlash)({ visible: true, dir });
@@ -520,7 +591,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
 
   const composedGesture = Gesture.Exclusive(doubleTapGesture, tapGesture);
 
-  // ── Derived ────────────────────────────────────────────────────────────────
+  // ── Derived ───────────────────────────────────────────────────────────────
   const progress = durationMs > 0 ? positionMs / durationMs : 0;
   const displayedRecent = recentChannels.slice(0, 5);
 
@@ -530,16 +601,16 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     [contentFit],
   );
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <GestureHandlerRootView style={st.root}>
       <StatusBar hidden />
 
-      {/* ── Video surface ─────────────────────────────────────────── */}
+      {/* ── Video surface ───────────────────────────────────────────── */}
       <GestureDetector gesture={composedGesture}>
         <View style={st.videoWrap}>
           <TvPlayerView
-            ref={tvPlayerCallbackRef}
+            ref={nativeViewRef}
             style={st.video as any}
             onReady={() => {
               setIsLoading(false);
@@ -597,6 +668,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                   }}
                   baseStyle={st.retryBtn}
                   focusedStyle={st.retryBtnFocused}
+                  hasTVPreferredFocus={isTV}
                   accessibilityLabel="Retry"
                 >
                   <Ionicons
@@ -666,12 +738,16 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         </View>
       </GestureDetector>
 
-      {/* ── Controls overlay ──────────────────────────────────────── */}
+      {/* ── Controls overlay ────────────────────────────────────────── */}
+      {/*
+          Always rendered (so animations work) but pointer-events are "none"
+          when hidden so touches pass through to the gesture detector below.
+          On TV, all TVFocusablePressable children are only focusable when
+          showControls is true, preventing focus from landing on invisible buttons.
+        */}
       <Animated.View
         style={[st.controlsOverlay, animControls]}
-        pointerEvents={
-          showControls && !isLocked ? (isTV ? "box-none" : "box-none") : "none"
-        }
+        pointerEvents={showControls && !isLocked ? "box-none" : "none"}
       >
         {/* ── Top bar ─────────────────────────────────────────────── */}
         <View
@@ -691,8 +767,11 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 onPress={onBack}
                 baseStyle={st.iconBtn}
                 focusedStyle={st.iconBtnFocused}
+                focusable={showControls}
                 hitSlop={16}
                 accessibilityLabel="Back"
+                viewRef={backBtnRef}
+                nextFocusDown={nh.playPause}
               >
                 <Ionicons
                   name="chevron-back"
@@ -727,63 +806,60 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
 
           {/* Top-right actions */}
           <View style={st.topRight}>
-            {displayedRecent.length > 0 ? (
+            {/* Recent channels */}
+            {recentChannels.length > 0 ? (
               <TVFocusablePressable
-                onPress={() => {
-                  setShowRecentPanel((p) => !p);
-                  resetTimeoutRef.current();
-                }}
+                onPress={() => setShowRecentPanel((p) => !p)}
                 baseStyle={st.iconBtn}
                 focusedStyle={st.iconBtnFocused}
-                hitSlop={16}
+                focusable={showControls}
                 accessibilityLabel="Recent channels"
               >
-                <Ionicons
-                  name="time-outline"
-                  size={playerControls.icon}
-                  color="#fff"
-                />
+                <Ionicons name="list" size={playerControls.icon} color="#fff" />
               </TVFocusablePressable>
             ) : null}
+
+            {/* Favourite */}
             {onFavoritePress ? (
               <TVFocusablePressable
                 onPress={onFavoritePress}
-                baseStyle={st.iconBtn}
+                baseStyle={[st.iconBtn, isFavorite && st.iconBtnActive]}
                 focusedStyle={st.iconBtnFocused}
-                hitSlop={16}
+                focusable={showControls}
                 accessibilityLabel={
                   isFavorite ? "Remove favourite" : "Add favourite"
                 }
               >
                 <Ionicons
-                  name={isFavorite ? "star" : "star-outline"}
+                  name={isFavorite ? "heart" : "heart-outline"}
                   size={playerControls.icon}
                   color={isFavorite ? Colors.dark.primary : "#fff"}
                 />
               </TVFocusablePressable>
             ) : null}
-            <TVFocusablePressable
-              onPress={() => {
-                setIsLocked(true);
-                hideControls();
-              }}
-              baseStyle={st.iconBtn}
-              focusedStyle={st.iconBtnFocused}
-              hitSlop={16}
-              accessibilityLabel="Lock controls"
-            >
-              <Ionicons
-                name="lock-open-outline"
-                size={playerControls.icon}
-                color="#fff"
-              />
-            </TVFocusablePressable>
+
+            {/* Lock */}
+            {!isTV ? (
+              <TVFocusablePressable
+                onPress={() => setIsLocked(true)}
+                baseStyle={st.iconBtn}
+                focusedStyle={st.iconBtnFocused}
+                focusable={showControls}
+                accessibilityLabel="Lock controls"
+              >
+                <Ionicons
+                  name="lock-open-outline"
+                  size={playerControls.icon}
+                  color="#fff"
+                />
+              </TVFocusablePressable>
+            ) : null}
           </View>
         </View>
 
-        {/* ── Center transport controls ────────────────────────────── */}
+        {/* ── Center transport ─────────────────────────────────────── */}
         <View style={st.centerRow}>
-          {/* Prev / seek-back */}
+          {/* Previous / seek-back */}
           {onPrevious ? (
             <TVFocusablePressable
               onPress={onPrevious}
@@ -796,6 +872,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 },
               ]}
               focusedStyle={st.navBtnFocused}
+              focusable={showControls}
               hitSlop={12}
               accessibilityLabel="Previous"
             >
@@ -817,6 +894,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 },
               ]}
               focusedStyle={st.navBtnFocused}
+              focusable={showControls}
               hitSlop={12}
               accessibilityLabel="Seek back 10s"
             >
@@ -832,7 +910,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
             />
           )}
 
-          {/* Play / Pause */}
+          {/* Play / Pause — always preferred focus on TV when controls are visible */}
           <TVFocusablePressable
             onPress={handlePlayPause}
             baseStyle={[
@@ -844,8 +922,12 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
               },
             ]}
             focusedStyle={st.playBtnFocused}
+            focusable={showControls}
             hasTVPreferredFocus={isTV && showControls}
             accessibilityLabel={isPlaying ? "Pause" : "Play"}
+            viewRef={playPauseBtnRef}
+            nextFocusUp={nh.backBtn}
+            nextFocusDown={nh.seekBar ?? nh.firstTool}
           >
             <Ionicons
               name={isPlaying ? "pause" : "play"}
@@ -867,6 +949,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 },
               ]}
               focusedStyle={st.navBtnFocused}
+              focusable={showControls}
               hitSlop={12}
               accessibilityLabel="Next"
             >
@@ -888,6 +971,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 },
               ]}
               focusedStyle={st.navBtnFocused}
+              focusable={showControls}
               hitSlop={12}
               accessibilityLabel="Seek forward 10s"
             >
@@ -922,27 +1006,43 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 {formatTime(positionMs)}
               </ThemedText>
               <Pressable
-                style={st.seekBar}
+                ref={seekBarRef}
+                style={[st.seekBar, seekBarFocused && st.seekBarFocused]}
+                focusable={showControls}
+                onFocus={() => setSeekBarFocused(true)}
+                onBlur={() => setSeekBarFocused(false)}
+                nextFocusUp={nh.playPause ?? undefined}
+                nextFocusDown={nh.firstTool ?? undefined}
                 onPress={(e) => {
-                  const pct =
-                    e.nativeEvent.locationX / (e.nativeEvent.target as any);
-                  // fallback: use the x position relative to screen width
+                  const barWidth =
+                    width -
+                    insets.left -
+                    insets.right -
+                    Spacing.md * 2 -
+                    48 * 2;
                   handleSeekToPercent(
-                    e.nativeEvent.locationX /
-                      (width -
-                        insets.left -
-                        insets.right -
-                        Spacing.md * 2 -
-                        50 * 2),
+                    Math.min(
+                      1,
+                      Math.max(0, e.nativeEvent.locationX / barWidth),
+                    ),
                   );
                 }}
               >
-                <View style={st.seekBarTrack}>
+                <View
+                  style={[
+                    st.seekBarTrack,
+                    seekBarFocused && st.seekBarTrackFocused,
+                  ]}
+                >
                   <View
                     style={[st.seekBarFill, { width: `${progress * 100}%` }]}
                   />
                   <View
-                    style={[st.seekThumb, { left: `${progress * 100}%` }]}
+                    style={[
+                      st.seekThumb,
+                      { left: `${progress * 100}%` },
+                      seekBarFocused && st.seekThumbFocused,
+                    ]}
                   />
                 </View>
               </Pressable>
@@ -981,9 +1081,9 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
               ) : null}
             </View>
 
-            {/* Right buttons */}
+            {/* Right tool buttons */}
             <View style={st.bottomRight}>
-              {/* Background audio — Android only */}
+              {/* Background audio */}
               <TVFocusablePressable
                 onPress={handleBackgroundToggle}
                 baseStyle={[
@@ -991,11 +1091,14 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                   isBackgroundPlaying && st.toolBtnActive,
                 ]}
                 focusedStyle={st.toolBtnFocused}
+                focusable={showControls}
                 accessibilityLabel={
                   isBackgroundPlaying
                     ? "Disable background audio"
                     : "Enable background audio"
                 }
+                viewRef={firstToolBtnRef}
+                nextFocusUp={nh.seekBar ?? nh.playPause}
               >
                 <Ionicons
                   name={
@@ -1010,12 +1113,10 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
 
               {/* Aspect ratio */}
               <TVFocusablePressable
-                onPress={() => {
-                  setShowAspectModal(true);
-                  resetTimeoutRef.current();
-                }}
+                onPress={() => setShowAspectModal(true)}
                 baseStyle={st.toolBtn}
                 focusedStyle={st.toolBtnFocused}
+                focusable={showControls}
                 accessibilityLabel="Aspect ratio"
               >
                 <Ionicons name="scan-outline" size={20} color="#fff" />
@@ -1024,15 +1125,13 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
               {/* Subtitles */}
               {propSubtitleTracks.length > 0 ? (
                 <TVFocusablePressable
-                  onPress={() => {
-                    setShowSubtitleModal(true);
-                    resetTimeoutRef.current();
-                  }}
+                  onPress={() => setShowSubtitleModal(true)}
                   baseStyle={[
                     st.toolBtn,
                     selectedSubtitleTrack !== null && st.toolBtnActive,
                   ]}
                   focusedStyle={st.toolBtnFocused}
+                  focusable={showControls}
                   accessibilityLabel="Subtitles"
                 >
                   <Ionicons
@@ -1050,12 +1149,10 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
               {/* Audio */}
               {propAudioTracks.length > 0 ? (
                 <TVFocusablePressable
-                  onPress={() => {
-                    setShowAudioModal(true);
-                    resetTimeoutRef.current();
-                  }}
+                  onPress={() => setShowAudioModal(true)}
                   baseStyle={st.toolBtn}
                   focusedStyle={st.toolBtnFocused}
+                  focusable={showControls}
                   accessibilityLabel="Audio track"
                 >
                   <Ionicons
@@ -1069,26 +1166,22 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
               {/* Quality */}
               {qualities.length > 0 ? (
                 <TVFocusablePressable
-                  onPress={() => {
-                    setShowQualityModal(true);
-                    resetTimeoutRef.current();
-                  }}
+                  onPress={() => setShowQualityModal(true)}
                   baseStyle={st.toolBtn}
                   focusedStyle={st.toolBtnFocused}
+                  focusable={showControls}
                   accessibilityLabel="Quality"
                 >
                   <Ionicons name="layers-outline" size={20} color="#fff" />
                 </TVFocusablePressable>
               ) : null}
 
-              {/* Settings (opens sub-menu) */}
+              {/* Settings */}
               <TVFocusablePressable
-                onPress={() => {
-                  setShowSettingsModal(true);
-                  resetTimeoutRef.current();
-                }}
+                onPress={() => setShowSettingsModal(true)}
                 baseStyle={st.toolBtn}
                 focusedStyle={st.toolBtnFocused}
+                focusable={showControls}
                 accessibilityLabel="Settings"
               >
                 <Ionicons name="settings-outline" size={20} color="#fff" />
@@ -1111,9 +1204,15 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
           <ThemedText type="h4" style={{ color: "#fff" }}>
             Recent
           </ThemedText>
-          <Pressable onPress={() => setShowRecentPanel(false)} hitSlop={16}>
+          <TVFocusablePressable
+            onPress={() => setShowRecentPanel(false)}
+            baseStyle={st.iconBtn}
+            focusedStyle={st.iconBtnFocused}
+            hitSlop={16}
+            accessibilityLabel="Close recent channels"
+          >
             <Ionicons name="close" size={22} color="#fff" />
-          </Pressable>
+          </TVFocusablePressable>
         </View>
         <ScrollView>
           {displayedRecent.map((ch) => (
@@ -1163,7 +1262,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         </ScrollView>
       </Animated.View>
 
-      {/* ── Settings modal ─────────────────────────────────────────── */}
+      {/* ── Settings modal ──────────────────────────────────────────── */}
       <Modal
         visible={showSettingsModal}
         transparent
@@ -1228,12 +1327,13 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
               },
             ]
               .filter((item) => !item.hidden)
-              .map((item) => (
+              .map((item, idx) => (
                 <TVFocusablePressable
                   key={item.label}
                   onPress={item.onPress}
                   baseStyle={st.settingsRow}
                   focusedStyle={st.settingsRowFocused}
+                  hasTVPreferredFocus={isTV && idx === 0}
                 >
                   <Ionicons
                     name={item.icon}
@@ -1262,7 +1362,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         </Pressable>
       </Modal>
 
-      {/* ── Quality modal ──────────────────────────────────────────── */}
+      {/* ── Quality modal ────────────────────────────────────────────── */}
       <Modal
         visible={showQualityModal}
         transparent
@@ -1284,6 +1384,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 selectedQuality === "auto" && st.optionRowActive,
               ]}
               focusedStyle={st.optionRowFocused}
+              hasTVPreferredFocus={isTV}
             >
               <ThemedText type="body" style={{ color: "#fff", flex: 1 }}>
                 Auto
@@ -1334,7 +1435,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         </Pressable>
       </Modal>
 
-      {/* ── Aspect ratio modal ─────────────────────────────────────── */}
+      {/* ── Aspect ratio modal ──────────────────────────────────────── */}
       <Modal
         visible={showAspectModal}
         transparent
@@ -1349,7 +1450,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
             <ThemedText type="h4" style={st.modalTitle}>
               Aspect Ratio
             </ThemedText>
-            {CONTENT_FIT_OPTIONS.map((opt) => (
+            {CONTENT_FIT_OPTIONS.map((opt, idx) => (
               <TVFocusablePressable
                 key={opt.value}
                 onPress={() => {
@@ -1362,6 +1463,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                   contentFit === opt.value && st.optionRowActive,
                 ]}
                 focusedStyle={st.optionRowFocused}
+                hasTVPreferredFocus={isTV && idx === 0}
               >
                 <Ionicons
                   name={opt.icon as any}
@@ -1385,7 +1487,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         </Pressable>
       </Modal>
 
-      {/* ── Audio modal ────────────────────────────────────────────── */}
+      {/* ── Audio modal ──────────────────────────────────────────────── */}
       <Modal
         visible={showAudioModal}
         transparent
@@ -1418,7 +1520,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 </ThemedText>
               </View>
             ) : (
-              propAudioTracks.map((track) => (
+              propAudioTracks.map((track, idx) => (
                 <TVFocusablePressable
                   key={track.id}
                   onPress={() => {
@@ -1430,6 +1532,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                     selectedAudioTrack === track.id && st.optionRowActive,
                   ]}
                   focusedStyle={st.optionRowFocused}
+                  hasTVPreferredFocus={isTV && idx === 0}
                 >
                   <View style={{ flex: 1 }}>
                     <ThemedText type="body" style={{ color: "#fff" }}>
@@ -1456,7 +1559,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         </Pressable>
       </Modal>
 
-      {/* ── Subtitle modal ─────────────────────────────────────────── */}
+      {/* ── Subtitle modal ───────────────────────────────────────────── */}
       <Modal
         visible={showSubtitleModal}
         transparent
@@ -1481,6 +1584,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 selectedSubtitleTrack === null && st.optionRowActive,
               ]}
               focusedStyle={st.optionRowFocused}
+              hasTVPreferredFocus={isTV}
             >
               <ThemedText type="body" style={{ color: "#fff", flex: 1 }}>
                 Off
@@ -1531,7 +1635,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
       </Modal>
     </GestureHandlerRootView>
   );
-}, arePropsEqual);
+});
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -1674,6 +1778,10 @@ const st = StyleSheet.create({
     borderWidth: 2,
     borderColor: "transparent",
   },
+  iconBtnActive: {
+    borderColor: Colors.dark.primary,
+    backgroundColor: Colors.dark.primary + "20",
+  },
   iconBtnFocused: {
     borderColor: Colors.dark.primary,
     backgroundColor: Colors.dark.primary + "40",
@@ -1727,13 +1835,24 @@ const st = StyleSheet.create({
   },
   seekBar: {
     flex: 1,
-    paddingVertical: 10, // larger hit target
+    paddingVertical: 10,
     marginHorizontal: Spacing.sm,
+    borderRadius: BorderRadius.xs,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  seekBarFocused: {
+    borderColor: Colors.dark.primary,
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
   seekBarTrack: {
     height: 4,
     backgroundColor: "rgba(255,255,255,0.3)",
     borderRadius: 2,
+  },
+  seekBarTrackFocused: {
+    height: 6,
+    backgroundColor: "rgba(255,255,255,0.45)",
   },
   seekBarFill: {
     height: "100%",
@@ -1748,6 +1867,15 @@ const st = StyleSheet.create({
     borderRadius: 7,
     backgroundColor: Colors.dark.primary,
     marginLeft: -7,
+  },
+  seekThumbFocused: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    top: -7,
+    marginLeft: -10,
+    borderWidth: 2,
+    borderColor: "#fff",
   },
   bottomRow: {
     flexDirection: "row",

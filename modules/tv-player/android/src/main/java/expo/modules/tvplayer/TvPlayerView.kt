@@ -177,6 +177,7 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
         stopPoller()
         disableBackgroundAudio(silent = true)
         exoPlayer?.let {
+            it.removeListener(aspectRatioListener)
             it.removeListener(playerListener)
             it.release()
         }
@@ -226,22 +227,13 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
 
         // Attach video output surface
         when {
-            isTV && surfaceView != null -> {
-                player.setVideoSurfaceView(surfaceView)
-                // Feed the video's aspect ratio back to AspectRatioFrameLayout
-                player.addListener(object : Player.Listener {
-                    override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
-                        if (videoSize.width > 0 && videoSize.height > 0) {
-                            val ratio = videoSize.width.toFloat() /
-                                    (videoSize.height * videoSize.pixelWidthHeightRatio)
-                            aspectFrame.setAspectRatio(ratio)
-                        }
-                    }
-                })
-            }
+            isTV && surfaceView != null -> player.setVideoSurfaceView(surfaceView)
             textureView != null -> attachTextureView(player, textureView)
         }
 
+        // aspectRatioListener and playerListener are named fields — they are removed
+        // cleanly in releasePlayer(), preventing leaks across load() calls.
+        player.addListener(aspectRatioListener)
         player.addListener(playerListener)
 
         val mediaItemBuilder = MediaItem.Builder().setUri(Uri.parse(url))
@@ -267,16 +259,7 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
     }
 
     private fun attachTextureView(player: ExoPlayer, tv: TextureView) {
-        // TextureView already handles its own aspect ratio via onVideoSizeChanged
-        player.addListener(object : Player.Listener {
-            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
-                if (videoSize.width > 0 && videoSize.height > 0) {
-                    val ratio = videoSize.width.toFloat() /
-                            (videoSize.height * videoSize.pixelWidthHeightRatio)
-                    aspectFrame.setAspectRatio(ratio)
-                }
-            }
-        })
+        // aspectRatioListener is added by buildPlayer() — no duplicate needed here.
         if (tv.isAvailable) player.setVideoSurface(Surface(tv.surfaceTexture))
         tv.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
             override fun onSurfaceTextureAvailable(st: SurfaceTexture, w: Int, h: Int) {
@@ -288,6 +271,17 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
                 return false
             }
             override fun onSurfaceTextureUpdated(st: SurfaceTexture) {}
+        }
+    }
+
+    // Reusable aspect-ratio listener — added once, removed in releasePlayer()
+    private val aspectRatioListener = object : Player.Listener {
+        override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+            if (videoSize.width > 0 && videoSize.height > 0) {
+                val ratio = videoSize.width.toFloat() /
+                        (videoSize.height * videoSize.pixelWidthHeightRatio)
+                aspectFrame.setAspectRatio(ratio)
+            }
         }
     }
 
@@ -321,7 +315,13 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        stopPoller()
-        // Do NOT release — background audio must keep playing.
+        if (backgroundAudioEnabled) {
+            // Background audio is active — only stop the position poller.
+            // The ExoPlayer instance lives on inside TvPlayerService.
+            stopPoller()
+        } else {
+            // No background audio — release everything to avoid memory/battery leaks.
+            releasePlayer()
+        }
     }
 }

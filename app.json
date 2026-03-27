@@ -30,9 +30,10 @@
     },
     "plugins": [
       [
-        "./plugins/withAndroidTVBanner",
+        "@react-native-tvos/config-tv",
         {
-          "banner": "./assets/images/android-tv-banner.png"
+          "isTV": true,
+          "androidTVBanner": "./assets/images/android-tv-banner.png"
         }
       ],
       ["./plugins/withNetworkSecurityConfig", {}],

@@ -43,7 +43,7 @@
     "expo-web-browser": "~15.0.10",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "react-native": "0.81.5",
+    "react-native": "npm:react-native-tvos@0.81-stable",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-keyboard-controller": "1.18.5",
     "react-native-reanimated": "~4.1.1",
@@ -56,6 +56,7 @@
     "zod-validation-error": "^3.4.0"
   },
   "devDependencies": {
+    "@react-native-tvos/config-tv": "^0.1.5",
     "@types/node": "24.10.0",
     "@types/react": "~19.1.0",
     "babel-plugin-module-resolver": "^5.0.2",
@@ -67,5 +68,12 @@
     "prettier": "3.6.2",
     "typescript": "~5.9.2"
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "install": {
+      "exclude": [
+        "react-native"
+      ]
+    }
+  }
 }
