@@ -1,0 +1,9 @@
+{
+  "name": "tv-player",
+  "version": "1.0.0",
+  "description": "Native ExoPlayer/Media3 video player for Android TV with background audio support",
+  "main": "src/index.ts",
+  "expo": {
+    "name": "TvPlayer"
+  }
+}

@@ -37,6 +37,7 @@
       ],
       ["./plugins/withNetworkSecurityConfig", {}],
       ["./modules/tv-channel/plugin"],
+      ["./modules/tv-player/plugin"],
       [
         "expo-splash-screen",
         {

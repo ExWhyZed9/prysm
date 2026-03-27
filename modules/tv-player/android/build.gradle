@@ -1,0 +1,59 @@
+apply plugin: 'com.android.library'
+apply plugin: 'org.jetbrains.kotlin.android'
+
+android {
+  namespace "expo.modules.tvplayer"
+  compileSdkVersion safeExtGet("compileSdkVersion", 35)
+
+  defaultConfig {
+    minSdkVersion safeExtGet("minSdkVersion", 26)
+    targetSdkVersion safeExtGet("targetSdkVersion", 35)
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = "17"
+  }
+
+  buildFeatures {
+    viewBinding true
+  }
+}
+
+repositories {
+  mavenCentral()
+  google()
+}
+
+dependencies {
+  implementation project(':expo-modules-core')
+  implementation "org.jetbrains.kotlin:kotlin-stdlib:${getKotlinVersion()}"
+  implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
+
+  // Media3 / ExoPlayer — the TV-grade player stack
+  implementation "androidx.media3:media3-exoplayer:1.3.1"
+  implementation "androidx.media3:media3-exoplayer-hls:1.3.1"
+  implementation "androidx.media3:media3-exoplayer-dash:1.3.1"
+  implementation "androidx.media3:media3-datasource:1.3.1"
+  implementation "androidx.media3:media3-datasource-okhttp:1.3.1"
+  implementation "androidx.media3:media3-ui:1.3.1"
+  implementation "androidx.media3:media3-session:1.3.1"
+
+  // OkHttp for custom headers / DRM token injection
+  implementation "com.squareup.okhttp3:okhttp:4.12.0"
+}
+
+def safeExtGet(prop, fallback) {
+  rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+}
+
+def getKotlinVersion() {
+  if (rootProject.ext.has('kotlinVersion')) {
+    return rootProject.ext.get('kotlinVersion')
+  }
+  return '1.9.24'
+}

@@ -39,8 +39,17 @@ import { useResponsive } from "@/hooks/useResponsive";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { parseHLSQualities, isHLSStream } from "@/lib/hls-quality-parser";
 import { Channel } from "@/types/playlist";
+import {
+  TvPlayerView,
+  TvPlayerCommands,
+} from "../../modules/tv-player/src/index";
 
+// Use the native ExoPlayer/Media3 module on all Android devices.
+// On TV: SurfaceView avoids TextureView z-ordering issues in the Leanback compositor.
+// On mobile: gives us a real foreground-service background-audio path that
+// expo-video does not expose at the JS level.
 const isTV = Platform.isTV;
+const useNativeTvPlayer = Platform.OS === "android";
 
 function TVFocusablePressable({
   onPress,
@@ -208,6 +217,8 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   const insets = useSafeAreaInsets();
   const { playerControls, isUltraWide, width, height } = useResponsive();
   const videoRef = useRef<VideoView>(null);
+  // Ref for the native TvPlayerView (Android TV only)
+  const tvPlayerRef = useRef<any>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const [showControls, setShowControls] = useState(false);
@@ -218,6 +229,8 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isBuffering, setIsBuffering] = useState(false);
+  // Android only — tracks whether the foreground service is running
+  const [isBackgroundPlaying, setIsBackgroundPlaying] = useState(false);
 
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showQualityModal, setShowQualityModal] = useState(false);
@@ -290,12 +303,16 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     return currentSource;
   }, [currentSource, headers]);
 
-  const player = useVideoPlayer(videoSource, (player) => {
-    player.loop = true;
-    if (autoPlay) {
-      player.play();
-    }
-  });
+  // expo-video player — only used on non-TV or iOS
+  const player = useVideoPlayer(
+    useNativeTvPlayer ? null : videoSource,
+    (player) => {
+      player.loop = true;
+      if (autoPlay) {
+        player.play();
+      }
+    },
+  );
 
   const animatedControlsStyle = useAnimatedStyle(() => ({
     opacity: controlsOpacity.value,
@@ -336,7 +353,55 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     }
   }, [showRecentChannels]);
 
+  // Load source into native TvPlayerView.
+  // Called both on source/header/drm changes AND when the view first mounts
+  // (handled via the tvPlayerCallbackRef below which fires once the ref is set).
+  const loadNativeSource = useCallback(() => {
+    if (!useNativeTvPlayer || !tvPlayerRef.current) return;
+    setIsLoading(true);
+    setError(null);
+    TvPlayerCommands.loadSource(tvPlayerRef, {
+      url: currentSource,
+      headers: headers && Object.keys(headers).length > 0 ? headers : undefined,
+      drmType: drm?.type as any,
+      drmLicenseUrl: drm?.licenseServer,
+      drmHeaders: drm?.headers,
+      autoPlay,
+    });
+  }, [currentSource, headers, drm, autoPlay]);
+
+  // Re-run whenever the source / drm / headers change (tvPlayerRef is already set)
   useEffect(() => {
+    if (!useNativeTvPlayer) return;
+    loadNativeSource();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSource, headers, drm, autoPlay]);
+
+  // Callback ref: fires once the TvPlayerView node is actually attached so the
+  // initial loadSource runs even before the deps-based effect above sees a change.
+  const tvPlayerCallbackRef = useCallback(
+    (node: any) => {
+      (tvPlayerRef as React.MutableRefObject<any>).current = node;
+      if (node) {
+        loadNativeSource();
+      }
+    },
+    // loadNativeSource identity changes with source/headers/drm, but that's fine —
+    // this only runs once on mount (node !== null) and once on unmount (node === null).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  // Cleanup native player on unmount (TV)
+  useEffect(() => {
+    if (!useNativeTvPlayer) return;
+    return () => {
+      TvPlayerCommands.release(tvPlayerRef);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (useNativeTvPlayer) return; // handled via onReady/onError/onPlayingChange/onBufferingChange props
     if (!player) return;
 
     const statusSubscription = player.addListener(
@@ -431,12 +496,16 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
       const isLeftSide = x < screenWidth / 2;
       const seekAmount = isLeftSide ? -SEEK_SECONDS : SEEK_SECONDS;
 
-      if (player) {
+      if (useNativeTvPlayer || player) {
         const newTime = Math.max(
           0,
-          Math.min(player.currentTime + seekAmount, duration),
+          Math.min((player?.currentTime ?? currentTime) + seekAmount, duration),
         );
-        player.currentTime = newTime;
+        if (useNativeTvPlayer) {
+          TvPlayerCommands.seekTo(tvPlayerRef, newTime * 1000);
+        } else if (player) {
+          player.currentTime = newTime;
+        }
         if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
         setSeekIndicator({
@@ -459,7 +528,13 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
 
   const handlePlayPause = useCallback(() => {
     if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (player) {
+    if (useNativeTvPlayer) {
+      if (isPlaying) {
+        TvPlayerCommands.pause(tvPlayerRef);
+      } else {
+        TvPlayerCommands.play(tvPlayerRef);
+      }
+    } else if (player) {
       if (isPlaying) {
         player.pause();
       } else {
@@ -471,10 +546,21 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
 
   const handleSeek = useCallback(
     (seconds: number) => {
-      if (player && !isLive) {
+      if (!isLive) {
         if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        const newTime = Math.max(0, Math.min(currentTime + seconds, duration));
-        player.currentTime = newTime;
+        if (useNativeTvPlayer) {
+          const newTimeMs = Math.max(
+            0,
+            Math.min((currentTime + seconds) * 1000, duration * 1000),
+          );
+          TvPlayerCommands.seekTo(tvPlayerRef, newTimeMs);
+        } else if (player) {
+          const newTime = Math.max(
+            0,
+            Math.min(currentTime + seconds, duration),
+          );
+          player.currentTime = newTime;
+        }
       }
       resetControlsTimeout();
     },
@@ -549,6 +635,16 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
       setShowRecentChannels(false);
     }
   }, [isLocked]);
+
+  const handleBackgroundToggle = useCallback(() => {
+    if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (isBackgroundPlaying) {
+      TvPlayerCommands.disableBackgroundAudio(tvPlayerRef);
+    } else {
+      TvPlayerCommands.enableBackgroundAudio(tvPlayerRef);
+    }
+    resetControlsTimeout();
+  }, [isBackgroundPlaying]);
 
   const handleRecentChannelPress = useCallback(
     (channelId: string) => {
@@ -672,14 +768,43 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     <GestureHandlerRootView style={styles.container}>
       <GestureDetector gesture={composedGesture}>
         <View style={styles.videoContainer}>
-          <VideoView
-            ref={videoRef}
-            player={player}
-            style={styles.video}
-            contentFit={contentFit}
-            nativeControls={isTV ? true : false}
-            allowsPictureInPicture
-          />
+          {useNativeTvPlayer ? (
+            <TvPlayerView
+              ref={tvPlayerCallbackRef}
+              style={styles.video}
+              onReady={() => {
+                setIsLoading(false);
+                setError(null);
+                setIsBuffering(false);
+              }}
+              onError={(e) => {
+                const msg = e.nativeEvent.message || "Failed to load stream";
+                setIsLoading(false);
+                setIsBuffering(false);
+                setError(msg);
+                onError?.(msg);
+              }}
+              onPlayingChange={(e) => {
+                setIsPlaying(e.nativeEvent.isPlaying);
+              }}
+              onBufferingChange={(e) => {
+                setIsBuffering(e.nativeEvent.isBuffering);
+                if (e.nativeEvent.isBuffering) setIsLoading(false);
+              }}
+              onBackgroundAudioChange={(e) => {
+                setIsBackgroundPlaying(e.nativeEvent.enabled);
+              }}
+            />
+          ) : (
+            <VideoView
+              ref={videoRef}
+              player={player}
+              style={styles.video}
+              contentFit={contentFit}
+              nativeControls={false}
+              allowsPictureInPicture
+            />
+          )}
 
           {(isLoading || isBuffering) && !error ? (
             <View style={styles.loadingOverlay} pointerEvents="none">
@@ -705,7 +830,19 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                   onPress={() => {
                     setIsLoading(true);
                     setError(null);
-                    if (player) {
+                    if (useNativeTvPlayer) {
+                      TvPlayerCommands.loadSource(tvPlayerRef, {
+                        url: currentSource,
+                        headers:
+                          headers && Object.keys(headers).length > 0
+                            ? headers
+                            : undefined,
+                        drmType: drm?.type as any,
+                        drmLicenseUrl: drm?.licenseServer,
+                        drmHeaders: drm?.headers,
+                        autoPlay: true,
+                      });
+                    } else if (player) {
                       player.play();
                     }
                   }}
@@ -1058,8 +1195,35 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
               ) : null}
             </View>
 
-            {/* CHANGED: Reordered buttons to move zoom icon to the right end */}
             <View style={styles.bottomRight}>
+              {/* Background audio — Android native player only */}
+              {useNativeTvPlayer ? (
+                <TVFocusablePressable
+                  onPress={handleBackgroundToggle}
+                  baseStyle={[
+                    styles.settingsButton,
+                    isBackgroundPlaying && styles.settingsButtonActive,
+                  ]}
+                  focusedStyle={styles.settingsButtonFocused}
+                  accessibilityLabel={
+                    isBackgroundPlaying
+                      ? "Disable background audio"
+                      : "Enable background audio"
+                  }
+                >
+                  <Ionicons
+                    name={
+                      isBackgroundPlaying
+                        ? "musical-notes"
+                        : "musical-notes-outline"
+                    }
+                    size={20}
+                    color={
+                      isBackgroundPlaying ? Colors.dark.primary : "#FFFFFF"
+                    }
+                  />
+                </TVFocusablePressable>
+              ) : null}
               <TVFocusablePressable
                 onPress={() => setShowSettingsModal(true)}
                 baseStyle={styles.settingsButton}
@@ -1068,14 +1232,17 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
               >
                 <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
               </TVFocusablePressable>
-              <TVFocusablePressable
-                onPress={handlePiP}
-                baseStyle={styles.settingsButton}
-                focusedStyle={styles.settingsButtonFocused}
-                accessibilityLabel="Picture in picture"
-              >
-                <Ionicons name="browsers-outline" size={20} color="#FFFFFF" />
-              </TVFocusablePressable>
+              {/* PiP only works on non-TV through expo-video's VideoView */}
+              {!isTV && !useNativeTvPlayer ? (
+                <TVFocusablePressable
+                  onPress={handlePiP}
+                  baseStyle={styles.settingsButton}
+                  focusedStyle={styles.settingsButtonFocused}
+                  accessibilityLabel="Picture in picture"
+                >
+                  <Ionicons name="browsers-outline" size={20} color="#FFFFFF" />
+                </TVFocusablePressable>
+              ) : null}
               <TVFocusablePressable
                 onPress={handleAspectRatioCycle}
                 baseStyle={styles.settingsButton}
@@ -1767,6 +1934,10 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
     borderWidth: 2,
     borderColor: "transparent",
+  },
+  settingsButtonActive: {
+    backgroundColor: Colors.dark.primary + "25",
+    borderColor: Colors.dark.primary,
   },
   settingsButtonFocused: {
     borderColor: Colors.dark.primary,
