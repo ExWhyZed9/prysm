@@ -23,8 +23,10 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.AspectRatioFrameLayout
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
@@ -214,14 +216,40 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
         val dataSourceFactory = DefaultDataSource.Factory(
             context, OkHttpDataSource.Factory(okHttpClient),
         )
+
+        // AUDIO_CONTENT_TYPE_MUSIC covers both live TV and radio streams.
+        // AUDIO_CONTENT_TYPE_MOVIE caused audio focus issues on audio-only
+        // streams (radio) on Android 12+ because no video renderer was active.
         val audioAttrs = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
-            .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
 
+        // DefaultRenderersFactory with EXTENSION_RENDERER_MODE_PREFER enables
+        // software decoders for AC3/EAC3/Dolby (common in DVB-T broadcasts from
+        // TV tuner backends like NextPVR) when the device has no hardware decoder.
+        val renderersFactory = DefaultRenderersFactory(context)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+
+        // DefaultTrackSelector with allowAudioMixedMimeTypeAdaptiveness ensures
+        // ExoPlayer always selects an audio track even when the stream contains
+        // codec types the default heuristic would normally skip (e.g. AC3 on a
+        // device that reports no hardware AC3 decoder).
+        val trackSelector = DefaultTrackSelector(context).apply {
+            setParameters(
+                buildUponParameters()
+                    .setAllowAudioMixedMimeTypeAdaptiveness(true)
+                    .setAllowAudioMixedChannelCountAdaptiveness(true)
+                    .setAllowAudioMixedDecoderSupportAdaptiveness(true)
+                    .build()
+            )
+        }
+
         val player = ExoPlayer.Builder(context)
+            .setRenderersFactory(renderersFactory)
+            .setTrackSelector(trackSelector)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
-            .setAudioAttributes(audioAttrs, true)
+            .setAudioAttributes(audioAttrs, /* handleAudioFocus= */ true)
             .setHandleAudioBecomingNoisy(true)
             .build()
 
