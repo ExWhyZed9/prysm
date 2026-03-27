@@ -126,16 +126,20 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
     const currentPlaylistInfo = playlists.find(
       (p) => p.id === activePlaylistId,
     );
-    if (!currentPlaylistInfo) return;
+    if (!currentPlaylistInfo?.url) return;
 
     try {
-      if (currentPlaylistInfo.url) {
-        const newPlaylist = await fetchAndParseM3U(currentPlaylistInfo.url);
-        await storage.savePlaylist(newPlaylist, "m3u");
-        setPlaylist(newPlaylist);
-        const updatedPlaylists = await storage.getPlaylistList();
-        setPlaylists(updatedPlaylists);
-      }
+      const newPlaylist = await fetchAndParseM3U(
+        currentPlaylistInfo.url,
+        currentPlaylistInfo.name,
+      );
+      // Preserve the existing playlist ID so storage overwrites in-place
+      // and channel IDs (favourites, recents) remain valid.
+      newPlaylist.id = currentPlaylistInfo.id;
+      await storage.savePlaylist(newPlaylist, "m3u");
+      setPlaylist(newPlaylist);
+      const updatedPlaylists = await storage.getPlaylistList();
+      setPlaylists(updatedPlaylists);
       lastRefreshTimeRef.current = Date.now();
     } catch (err) {
       console.warn("Auto-refresh failed:", err);
@@ -403,10 +407,25 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
     const currentPlaylistInfo = playlists.find(
       (p) => p.id === activePlaylistId,
     );
-    if (!currentPlaylistInfo) return;
+    if (!currentPlaylistInfo?.url) return;
 
-    if (currentPlaylistInfo.url) {
-      await loadPlaylistFromUrl(currentPlaylistInfo.url);
+    try {
+      setIsLoadingPlaylist(true);
+      setError(null);
+      const newPlaylist = await fetchAndParseM3U(
+        currentPlaylistInfo.url,
+        currentPlaylistInfo.name,
+      );
+      // Preserve the existing playlist ID so it overwrites in-place.
+      newPlaylist.id = currentPlaylistInfo.id;
+      await storage.savePlaylist(newPlaylist, "m3u");
+      setPlaylist(newPlaylist);
+      const updatedPlaylists = await storage.getPlaylistList();
+      setPlaylists(updatedPlaylists);
+    } catch (err: any) {
+      setError(err.message || "Failed to refresh playlist");
+    } finally {
+      setIsLoadingPlaylist(false);
     }
   };
 
