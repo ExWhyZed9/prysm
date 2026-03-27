@@ -560,6 +560,16 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     scheduleHideRef.current();
   }, [isBackgroundPlaying]);
 
+  // ── Channel navigation ────────────────────────────────────────────────────
+  // Stop background audio before switching channels so the old stream doesn't
+  // keep playing while the new PlayerScreen mounts and starts a fresh player.
+  const navigateToChannel = useCallback((fn?: () => void) => {
+    if (isBackgroundPlayingRef.current) {
+      TvPlayerCommands.disableBackgroundAudio(tvPlayerRef);
+    }
+    fn?.();
+  }, []);
+
   // ── Animations: panels ────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -870,7 +880,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
           {/* Previous / seek-back */}
           {onPrevious ? (
             <TVFocusablePressable
-              onPress={onPrevious}
+              onPress={() => navigateToChannel(onPrevious)}
               baseStyle={[
                 st.navBtn,
                 {
@@ -947,7 +957,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
           {/* Next / seek-forward */}
           {onNext ? (
             <TVFocusablePressable
-              onPress={onNext}
+              onPress={() => navigateToChannel(onNext)}
               baseStyle={[
                 st.navBtn,
                 {
@@ -1227,7 +1237,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
             <TVFocusablePressable
               key={ch.id}
               onPress={() => {
-                onChannelSelect?.(ch.id);
+                navigateToChannel(() => onChannelSelect?.(ch.id));
                 setShowRecentPanel(false);
               }}
               baseStyle={st.recentItem}
