@@ -377,20 +377,14 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSource, headers, drm, autoPlay]);
 
-  // Callback ref: fires once the TvPlayerView node is actually attached so the
-  // initial loadSource runs even before the deps-based effect above sees a change.
-  const tvPlayerCallbackRef = useCallback(
-    (node: any) => {
-      (tvPlayerRef as React.MutableRefObject<any>).current = node;
-      if (node) {
-        loadNativeSource();
-      }
-    },
-    // loadNativeSource identity changes with source/headers/drm, but that's fine —
-    // this only runs once on mount (node !== null) and once on unmount (node === null).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
+  // Callback ref: just keeps tvPlayerRef.current in sync with the native node.
+  // The useEffect below ([currentSource, headers, drm, autoPlay]) fires after
+  // every render that changes those deps — including the initial mount — so it
+  // will call loadNativeSource() once the ref is set without needing a stale
+  // closure here.
+  const tvPlayerCallbackRef = useCallback((node: any) => {
+    (tvPlayerRef as React.MutableRefObject<any>).current = node;
+  }, []);
 
   // Cleanup native player on unmount (TV)
   useEffect(() => {
