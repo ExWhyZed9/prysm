@@ -129,7 +129,7 @@ function ChannelCardHorizontalInner({
             ] as ViewStyle[]
           }
           hitSlop={8}
-          focusable={true}
+          focusable={!isTV}
           accessibilityLabel={
             isFavorite ? "Remove from favorites" : "Add to favorites"
           }
