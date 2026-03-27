@@ -15,6 +15,7 @@ import {
   Platform,
   ViewStyle,
   StatusBar,
+  PermissionsAndroid,
 } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
@@ -468,11 +469,22 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     [source],
   );
 
-  const handleBackgroundToggle = useCallback(() => {
+  const handleBackgroundToggle = useCallback(async () => {
     if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (isBackgroundPlaying) {
       TvPlayerCommands.disableBackgroundAudio(tvPlayerRef);
     } else {
+      // Android 13+ (API 33) requires POST_NOTIFICATIONS at runtime for the
+      // media playback notification posted by MediaSessionService.
+      if (
+        Platform.OS === "android" &&
+        parseInt(String(Platform.Version), 10) >= 33
+      ) {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) return;
+      }
       TvPlayerCommands.enableBackgroundAudio(tvPlayerRef);
     }
     resetTimeoutRef.current();

@@ -21,5 +21,7 @@
   <!-- Required for foreground media service on Android 9+ -->
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+  <!-- Required to post the playback notification on Android 13+ (API 33) -->
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
 </manifest>

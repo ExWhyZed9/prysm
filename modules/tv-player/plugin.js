@@ -26,6 +26,8 @@ function withTvPlayer(config) {
     const requiredPerms = [
       "android.permission.FOREGROUND_SERVICE",
       "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+      // Required to post the media playback notification on Android 13+ (API 33)
+      "android.permission.POST_NOTIFICATIONS",
     ];
     for (const perm of requiredPerms) {
       if (!existingPerms.includes(perm)) {

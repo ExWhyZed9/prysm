@@ -25,6 +25,7 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.ui.AspectRatioFrameLayout
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
@@ -36,30 +37,43 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
 
     private var exoPlayer: ExoPlayer? = null
 
-    // TV → SurfaceView (avoids TextureView z-order conflict with Leanback compositor).
-    // Mobile → TextureView (required in a normal hardware-accelerated Activity window).
     private val isTV: Boolean = context.packageManager
         .hasSystemFeature("android.hardware.type.television") ||
         context.packageManager.hasSystemFeature("android.software.leanback")
 
+    // AspectRatioFrameLayout is the Media3-UI container that resizes itself to
+    // match the video's actual aspect ratio — prevents the stretch-to-fill
+    // that happens when a bare SurfaceView/TextureView fills its parent.
+    private val aspectFrame = AspectRatioFrameLayout(context).apply {
+        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT   // "contain" — default
+        layoutParams = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            Gravity.CENTER,
+        )
+    }
+
     private val surfaceView: SurfaceView? = if (isTV) SurfaceView(context) else null
     private val textureView: TextureView? = if (!isTV) TextureView(context) else null
 
+    // Background audio state
     private var backgroundAudioEnabled = false
+    // Guard against re-entrant start/stop calls while the service is mid-transition
+    private var serviceStarting = false
 
-    // Polls position/duration every second while playing
     private val mainHandler = Handler(Looper.getMainLooper())
     private val positionPoller = object : Runnable {
         override fun run() {
             val p = exoPlayer ?: return
-            val pos = p.currentPosition
-            val dur = p.duration.takeIf { it != C.TIME_UNSET } ?: 0L
-            onPositionChange(mapOf("position" to pos, "duration" to dur))
+            onPositionChange(mapOf(
+                "position" to p.currentPosition,
+                "duration" to (p.duration.takeIf { it != C.TIME_UNSET } ?: 0L),
+            ))
             mainHandler.postDelayed(this, 1000)
         }
     }
 
-    // ── EventDispatchers ─────────────────────────────────────────────────────
+    // ── EventDispatchers ──────────────────────────────────────────────────────
     val onReady by EventDispatcher()
     val onError by EventDispatcher()
     val onPlayingChange by EventDispatcher()
@@ -68,12 +82,21 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
     val onPositionChange by EventDispatcher()
 
     init {
-        val params = FrameLayout.LayoutParams(
+        val fillParams = FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT,
-            Gravity.CENTER,
         )
-        if (isTV) addView(surfaceView, params) else addView(textureView, params)
+        if (isTV) {
+            aspectFrame.addView(surfaceView, fillParams)
+        } else {
+            aspectFrame.addView(textureView, fillParams)
+        }
+        addView(aspectFrame)
+    }
+
+    // ── Resize mode (called from JS contentFit prop if we add it later) ───────
+    fun setResizeMode(mode: Int) {
+        aspectFrame.resizeMode = mode
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -100,25 +123,51 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
     fun isPlaying(): Boolean = exoPlayer?.isPlaying ?: false
     fun isBackgroundAudioEnabled(): Boolean = backgroundAudioEnabled
 
+    /**
+     * Enable background audio.
+     *
+     * Sets PlayerRegistry.player BEFORE starting the service so that
+     * TvPlayerService.onCreate() always finds a valid player.
+     * Uses a serviceStarting guard to prevent double-starts.
+     */
     fun enableBackgroundAudio() {
-        if (backgroundAudioEnabled) return
+        if (backgroundAudioEnabled || serviceStarting) return
         val player = exoPlayer ?: return
+
+        serviceStarting = true
         PlayerRegistry.player = player
+
         val intent = Intent(context, TvPlayerService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(intent)
-        } else {
-            context.startService(intent)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+            backgroundAudioEnabled = true
+            onBackgroundAudioChange(mapOf("enabled" to true))
+        } catch (e: Exception) {
+            // startForegroundService can throw on some OEM ROMs — reset state cleanly
+            PlayerRegistry.player = null
+        } finally {
+            serviceStarting = false
         }
-        backgroundAudioEnabled = true
-        onBackgroundAudioChange(mapOf("enabled" to true))
     }
 
+    /**
+     * Disable background audio.
+     *
+     * Clears PlayerRegistry BEFORE stopping the service so the service's
+     * onDestroy() cannot accidentally access a stale player reference.
+     * The `silent` flag suppresses the JS event (used during releasePlayer).
+     */
     fun disableBackgroundAudio(silent: Boolean = false) {
         if (!backgroundAudioEnabled) return
-        context.stopService(Intent(context, TvPlayerService::class.java))
-        PlayerRegistry.player = null
         backgroundAudioEnabled = false
+        PlayerRegistry.player = null
+        try {
+            context.stopService(Intent(context, TvPlayerService::class.java))
+        } catch (_: Exception) {}
         if (!silent) {
             try { onBackgroundAudioChange(mapOf("enabled" to false)) } catch (_: Exception) {}
         }
@@ -162,23 +211,35 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
             .build()
 
         val dataSourceFactory = DefaultDataSource.Factory(
-            context, OkHttpDataSource.Factory(okHttpClient)
+            context, OkHttpDataSource.Factory(okHttpClient),
         )
-
-        val audioAttributes = AudioAttributes.Builder()
+        val audioAttrs = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
             .build()
 
         val player = ExoPlayer.Builder(context)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
-            .setAudioAttributes(audioAttributes, true)
+            .setAudioAttributes(audioAttrs, true)
             .setHandleAudioBecomingNoisy(true)
             .build()
 
+        // Attach video output surface
         when {
-            isTV && surfaceView != null -> player.setVideoSurfaceView(surfaceView)
-            textureView != null        -> attachTextureView(player, textureView)
+            isTV && surfaceView != null -> {
+                player.setVideoSurfaceView(surfaceView)
+                // Feed the video's aspect ratio back to AspectRatioFrameLayout
+                player.addListener(object : Player.Listener {
+                    override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                        if (videoSize.width > 0 && videoSize.height > 0) {
+                            val ratio = videoSize.width.toFloat() /
+                                    (videoSize.height * videoSize.pixelWidthHeightRatio)
+                            aspectFrame.setAspectRatio(ratio)
+                        }
+                    }
+                })
+            }
+            textureView != null -> attachTextureView(player, textureView)
         }
 
         player.addListener(playerListener)
@@ -206,6 +267,16 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
     }
 
     private fun attachTextureView(player: ExoPlayer, tv: TextureView) {
+        // TextureView already handles its own aspect ratio via onVideoSizeChanged
+        player.addListener(object : Player.Listener {
+            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                if (videoSize.width > 0 && videoSize.height > 0) {
+                    val ratio = videoSize.width.toFloat() /
+                            (videoSize.height * videoSize.pixelWidthHeightRatio)
+                    aspectFrame.setAspectRatio(ratio)
+                }
+            }
+        })
         if (tv.isAvailable) player.setVideoSurface(Surface(tv.surfaceTexture))
         tv.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
             override fun onSurfaceTextureAvailable(st: SurfaceTexture, w: Int, h: Int) {
@@ -250,8 +321,7 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        // Do NOT release — background audio keeps playing.
-        // Poller is stopped here; it restarts when playing resumes.
         stopPoller()
+        // Do NOT release — background audio must keep playing.
     }
 }
