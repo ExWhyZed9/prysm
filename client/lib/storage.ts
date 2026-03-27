@@ -217,7 +217,7 @@ export async function savePlaylist(
       type,
       url: playlist.url,
       xtreamCredentials,
-      categories: playlist.categories.slice(0, 50),
+      categories: playlist.categories,
       lastUpdated: playlist.lastUpdated,
       totalChannels: channels.length,
       chunkCount,
@@ -315,11 +315,24 @@ export async function getPlaylist(
       }
     }
 
+    // Rebuild categories from the actual channel data rather than the stored
+    // list. This is self-healing for playlists saved before the 50-category
+    // cap was removed, and ensures the list is always complete and in order.
+    const categorySet = new Set<string>();
+    for (const ch of channels) {
+      if (ch.group) categorySet.add(ch.group);
+    }
+    const categories = Array.from(categorySet).sort((a, b) => {
+      if (a === "Uncategorized") return 1;
+      if (b === "Uncategorized") return -1;
+      return a.localeCompare(b);
+    });
+
     return {
       id: meta.id,
       name: meta.name,
       url: meta.url,
-      categories: meta.categories,
+      categories,
       lastUpdated: meta.lastUpdated,
       channels,
     };
