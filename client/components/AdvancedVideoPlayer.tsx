@@ -225,6 +225,8 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Ref mirror of showControls — always in sync, read by TVEventHandler closure
   const showControlsRef = useRef(false);
+  // Ref mirror of isBackgroundPlaying — read by TVEventHandler closure
+  const isBackgroundPlayingRef = useRef(false);
 
   // TV focus routing — refs for nextFocus wiring between the three control rows
   const backBtnRef = useRef<any>(null);
@@ -267,6 +269,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   const [showRecentPanel, setShowRecentPanel] = useState(false);
 
   // Modals
+  const [showStopAudioModal, setShowStopAudioModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showQualityModal, setShowQualityModal] = useState(false);
   const [showAspectModal, setShowAspectModal] = useState(false);
@@ -470,6 +473,10 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
             setShowControlsState(false);
             controlsOpacity.value = withTiming(0, { duration: 200 });
             setShowRecentPanel(false);
+          } else if (isBackgroundPlayingRef.current) {
+            // Background audio is on — ask the user whether to stop it or keep
+            // it playing before navigating away.
+            setShowStopAudioModal(true);
           } else {
             // Controls already hidden — treat as a navigation back
             onBack?.();
@@ -629,9 +636,10 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
               setIsBuffering(e.nativeEvent.isBuffering);
               if (e.nativeEvent.isBuffering) setIsLoading(false);
             }}
-            onBackgroundAudioChange={(e) =>
-              setIsBackgroundPlaying(e.nativeEvent.enabled)
-            }
+            onBackgroundAudioChange={(e) => {
+              isBackgroundPlayingRef.current = e.nativeEvent.enabled;
+              setIsBackgroundPlaying(e.nativeEvent.enabled);
+            }}
             onPositionChange={(e) => {
               setPositionMs(e.nativeEvent.position);
               setDurationMs(e.nativeEvent.duration);
@@ -1261,6 +1269,81 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
           ))}
         </ScrollView>
       </Animated.View>
+
+      {/* ── Stop background audio confirmation (TV only) ────────────── */}
+      <Modal
+        visible={showStopAudioModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowStopAudioModal(false)}
+      >
+        <View style={st.modalScrim}>
+          <View style={[st.modalSheet, { maxWidth: 360 }]}>
+            <Ionicons
+              name="musical-notes"
+              size={36}
+              color={Colors.dark.primary}
+              style={{ alignSelf: "center", marginBottom: Spacing.md }}
+            />
+            <ThemedText type="h4" style={st.modalTitle}>
+              Audio playing in background
+            </ThemedText>
+            <ThemedText
+              type="body"
+              style={{
+                color: Colors.dark.textSecondary,
+                textAlign: "center",
+                marginBottom: Spacing.xl,
+              }}
+            >
+              Do you want to keep the audio playing after you leave?
+            </ThemedText>
+            <TVFocusablePressable
+              onPress={() => {
+                setShowStopAudioModal(false);
+                onBack?.();
+              }}
+              baseStyle={st.optionRow}
+              focusedStyle={st.optionRowFocused}
+              hasTVPreferredFocus={isTV}
+              accessibilityLabel="Keep playing and go back"
+            >
+              <Ionicons
+                name="musical-notes-outline"
+                size={22}
+                color={Colors.dark.primary}
+                style={{ marginRight: Spacing.md }}
+              />
+              <ThemedText type="body" style={{ color: "#fff", flex: 1 }}>
+                Keep playing
+              </ThemedText>
+            </TVFocusablePressable>
+            <TVFocusablePressable
+              onPress={() => {
+                TvPlayerCommands.disableBackgroundAudio(tvPlayerRef);
+                setShowStopAudioModal(false);
+                onBack?.();
+              }}
+              baseStyle={st.optionRow}
+              focusedStyle={st.optionRowFocused}
+              accessibilityLabel="Stop audio and go back"
+            >
+              <Ionicons
+                name="stop-circle-outline"
+                size={22}
+                color={Colors.dark.error}
+                style={{ marginRight: Spacing.md }}
+              />
+              <ThemedText
+                type="body"
+                style={{ color: Colors.dark.error, flex: 1 }}
+              >
+                Stop audio
+              </ThemedText>
+            </TVFocusablePressable>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Settings modal ──────────────────────────────────────────── */}
       <Modal

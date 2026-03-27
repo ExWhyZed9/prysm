@@ -49,11 +49,8 @@ class TvPlayerService : MediaSessionService() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         // User swiped the app away from recents — stop playback and the service.
-        mediaSession?.player?.let { player ->
-            if (!player.playWhenReady || player.mediaItemCount == 0) {
-                stopSelf()
-            }
-        }
+        // Background audio is intentional so we let it keep playing; the user
+        // can stop it via the media notification. Do nothing here.
     }
 
     override fun onDestroy() {
