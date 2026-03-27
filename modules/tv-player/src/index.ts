@@ -74,6 +74,12 @@ export const TvPlayerCommands = {
   isPlaying: (viewRef: React.RefObject<any>): Promise<boolean> | undefined =>
     viewRef.current?.isPlaying(),
 
+  /** "contain" | "cover" | "fill" — maps to RESIZE_MODE_FIT/ZOOM/FILL */
+  setResizeMode: (
+    viewRef: React.RefObject<any>,
+    mode: "contain" | "cover" | "fill",
+  ): Promise<void> | undefined => viewRef.current?.setResizeMode(mode),
+
   enableBackgroundAudio: (
     viewRef: React.RefObject<any>,
   ): Promise<void> | undefined => viewRef.current?.enableBackgroundAudio(),

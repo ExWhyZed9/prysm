@@ -75,6 +75,18 @@ class TvPlayerModule : Module() {
 
             // ── Background audio ───────────────────────────────────────────
 
+            // "contain" → RESIZE_MODE_FIT (0)
+            // "cover"   → RESIZE_MODE_ZOOM (3)
+            // "fill"    → RESIZE_MODE_FILL (1)
+            AsyncFunction("setResizeMode") { view: TvPlayerView, mode: String ->
+                val resizeMode = when (mode) {
+                    "cover"   -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                    "fill"    -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL
+                    else      -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+                }
+                view.setResizeMode(resizeMode)
+            }
+
             AsyncFunction("enableBackgroundAudio") { view: TvPlayerView ->
                 view.enableBackgroundAudio()
             }

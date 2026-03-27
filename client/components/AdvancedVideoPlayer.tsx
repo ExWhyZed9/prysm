@@ -1354,6 +1354,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 key={opt.value}
                 onPress={() => {
                   setContentFit(opt.value);
+                  TvPlayerCommands.setResizeMode(tvPlayerRef, opt.value);
                   setShowAspectModal(false);
                 }}
                 baseStyle={[
