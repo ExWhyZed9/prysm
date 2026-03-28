@@ -219,7 +219,22 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
 
       if (savedActiveId) {
         const savedPlaylist = await storage.getPlaylist(savedActiveId);
-        if (savedPlaylist) setPlaylist(savedPlaylist);
+        if (savedPlaylist) {
+          setPlaylist(savedPlaylist);
+
+          // Sync favourites to the Android TV launcher home row on startup
+          // so the row is populated after a reinstall or data clear without
+          // needing to toggle a favourite first.
+          if (savedFavorites.length > 0) {
+            const idMap = new Map<string, Channel>();
+            for (const ch of savedPlaylist.channels) idMap.set(ch.id, ch);
+            const favChannels = savedFavorites
+              .map((id) => idMap.get(id))
+              .filter((ch): ch is Channel => ch !== undefined)
+              .map((ch) => ({ id: ch.id, name: ch.name, logo: ch.logo }));
+            syncFavourites(favChannels);
+          }
+        }
       }
     } catch (err) {
       console.error("Error loading initial data:", err);

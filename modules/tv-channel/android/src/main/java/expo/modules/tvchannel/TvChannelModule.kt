@@ -1,9 +1,9 @@
 package expo.modules.tvchannel
 
-import android.content.ContentUris
 import android.net.Uri
 import android.os.Build
-import androidx.tvprovider.media.tv.Channel
+import androidx.tvprovider.media.tv.PreviewChannel
+import androidx.tvprovider.media.tv.PreviewChannelHelper
 import androidx.tvprovider.media.tv.PreviewProgram
 import androidx.tvprovider.media.tv.TvContractCompat
 import expo.modules.kotlin.modules.Module
@@ -13,12 +13,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-data class FavouriteItem(
-    val id: String,
-    val name: String,
-    val logo: String?
-)
 
 class TvChannelModule : Module() {
     companion object {
@@ -38,13 +32,19 @@ class TvChannelModule : Module() {
 
             CoroutineScope(Dispatchers.IO).launch {
                 try {
-                    val channelId = getOrCreateChannel()
+                    val helper = PreviewChannelHelper(ctx)
 
+                    // ── Get or create the preview channel ─────────────────
+                    val channelId = getOrCreatePreviewChannel(helper)
+
+                    // ── Replace all preview programs ──────────────────────
+                    // Delete existing programs in this channel first.
                     ctx.contentResolver.delete(
                         TvContractCompat.buildPreviewProgramsUriForChannel(channelId),
                         null, null
                     )
 
+                    // Insert new programs for each favourite.
                     for (item in items) {
                         val id   = item["id"]   as? String ?: continue
                         val name = item["name"] as? String ?: continue
@@ -59,15 +59,15 @@ class TvChannelModule : Module() {
                             .setIntentUri(intentUri)
                             .setInternalProviderId(id)
                             .setLive(true)
+                            .setPosterArtAspectRatio(
+                                TvContractCompat.PreviewPrograms.ASPECT_RATIO_16_9
+                            )
 
                         if (!logo.isNullOrEmpty()) {
                             builder.setPosterArtUri(Uri.parse(logo))
                         }
 
-                        ctx.contentResolver.insert(
-                            TvContractCompat.PreviewPrograms.CONTENT_URI,
-                            builder.build().toContentValues()
-                        )
+                        helper.publishPreviewProgram(builder.build())
                     }
 
                     withContext(Dispatchers.Main) { promise.resolve(channelId) }
@@ -80,41 +80,33 @@ class TvChannelModule : Module() {
         }
     }
 
-    private fun getOrCreateChannel(): Long {
-        val ctx = appContext.reactContext!!
+    /**
+     * Returns the existing PreviewChannel ID for this app, or creates a new one.
+     *
+     * Uses [PreviewChannelHelper.publishDefaultChannel] for the first channel —
+     * this silently adds the row to the home screen without any user dialog, and
+     * registers the app in the "Customize channels" list automatically.
+     *
+     * For subsequent runs (channel already exists) we just return the stored ID.
+     */
+    private fun getOrCreatePreviewChannel(helper: PreviewChannelHelper): Long {
+        // Check if we already have a channel registered.
+        val existing = helper.allChannels.find { it.internalProviderId == CHANNEL_INTERNAL_ID }
+        if (existing != null) return existing.id
 
-        val cursor = ctx.contentResolver.query(
-            TvContractCompat.Channels.CONTENT_URI,
-            arrayOf(
-                TvContractCompat.Channels._ID,
-                TvContractCompat.Channels.COLUMN_INTERNAL_PROVIDER_ID
-            ),
-            null, null, null
-        )
-
-        cursor?.use {
-            while (it.moveToNext()) {
-                if (it.getString(1) == CHANNEL_INTERNAL_ID) {
-                    return it.getLong(0)
-                }
-            }
-        }
-
-        val channel = Channel.Builder()
-            .setType(TvContractCompat.Channels.TYPE_PREVIEW)
+        // Build the PreviewChannel — NOT Channel. PreviewChannel is the home
+        // screen row API. Channel is for TvInputService (live TV tuner) channels.
+        val channel = PreviewChannel.Builder()
             .setDisplayName("Prysm Favourites")
-            .setDescription("Your starred channels from Prysm Player")
+            .setDescription("Your starred channels from Prysm")
             .setAppLinkIntentUri(Uri.parse("prysmplayer://favourites"))
             .setInternalProviderId(CHANNEL_INTERNAL_ID)
             .build()
 
-        val uri = ctx.contentResolver.insert(
-            TvContractCompat.Channels.CONTENT_URI,
-            channel.toContentValues()
-        ) ?: throw IllegalStateException("Failed to create TV channel")
-
-        val channelId = ContentUris.parseId(uri)
-        TvContractCompat.requestChannelBrowsable(ctx, channelId)
-        return channelId
+        // publishDefaultChannel silently adds the first channel to the home screen
+        // without showing a "Do you want to add this channel?" dialog.
+        // This is the same API used by YouTube, Netflix, and the Google TV reference app.
+        // It also registers the app in "Customize channels" automatically.
+        return helper.publishDefaultChannel(channel)
     }
 }

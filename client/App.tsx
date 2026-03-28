@@ -1,6 +1,11 @@
 import React, { useEffect } from "react";
 import { StyleSheet, View, ActivityIndicator, Platform } from "react-native";
-import { NavigationContainer, DarkTheme, DefaultTheme } from "@react-navigation/native";
+import {
+  NavigationContainer,
+  DarkTheme,
+  DefaultTheme,
+  LinkingOptions,
+} from "@react-navigation/native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -24,6 +29,28 @@ import { PlaylistProvider } from "@/context/PlaylistContext";
 import { ThemeProvider, useThemeContext } from "@/context/ThemeContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Colors } from "@/constants/theme";
+import { RootStackParamList } from "@/navigation/RootStackNavigator";
+
+// Deep link config — handles prysmplayer://play?channelId=<id> from the
+// Android TV launcher home row tiles.
+const linking: LinkingOptions<RootStackParamList> = {
+  prefixes: ["prysmplayer://"],
+  config: {
+    screens: {
+      Main: {
+        // prysmplayer://favourites → open channels tab
+        path: "favourites",
+      },
+      Player: {
+        // prysmplayer://play?channelId=<id> → open player
+        path: "play",
+        parse: {
+          channelId: (id: string) => id,
+        },
+      },
+    },
+  },
+};
 
 SplashScreen.preventAutoHideAsync();
 
@@ -55,10 +82,12 @@ function AppContent() {
       };
 
   return (
-    <GestureHandlerRootView style={[styles.root, { backgroundColor: theme.backgroundRoot }]}>
+    <GestureHandlerRootView
+      style={[styles.root, { backgroundColor: theme.backgroundRoot }]}
+    >
       <KeyboardProvider>
         <PlaylistProvider>
-          <NavigationContainer theme={navigationTheme}>
+          <NavigationContainer theme={navigationTheme} linking={linking}>
             <RootStackNavigator />
           </NavigationContainer>
         </PlaylistProvider>
@@ -89,9 +118,11 @@ export default function App() {
   const configureOrientation = async () => {
     try {
       const isTV = Platform.isTV || Device.deviceType === Device.DeviceType.TV;
-      
+
       if (isTV) {
-        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+        await ScreenOrientation.lockAsync(
+          ScreenOrientation.OrientationLock.LANDSCAPE,
+        );
       } else {
         await ScreenOrientation.unlockAsync();
       }
