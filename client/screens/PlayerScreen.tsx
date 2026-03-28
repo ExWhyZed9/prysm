@@ -1,21 +1,34 @@
 import React, { useEffect, useMemo, useCallback } from "react";
-import { StyleSheet, View, Pressable, StatusBar, Platform } from "react-native";
+import {
+  StyleSheet,
+  View,
+  Pressable,
+  StatusBar,
+  Platform,
+  useWindowDimensions,
+} from "react-native";
 
 const isTV = Platform.isTV;
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 
 import { ThemedText } from "@/components/ThemedText";
-import { AdvancedVideoPlayer, VideoQuality, DRMConfig } from "@/components/AdvancedVideoPlayer";
+import {
+  AdvancedVideoPlayer,
+  VideoQuality,
+  DRMConfig,
+} from "@/components/AdvancedVideoPlayer";
 import { usePlaylist } from "@/context/PlaylistContext";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 type PlayerRouteProp = RouteProp<RootStackParamList, "Player">;
-type PlayerNavigationProp = NativeStackNavigationProp<RootStackParamList, "Player">;
+type PlayerNavigationProp = NativeStackNavigationProp<
+  RootStackParamList,
+  "Player"
+>;
 
 const DEFAULT_QUALITIES: VideoQuality[] = [
   { label: "1080p", resolution: "1080p", bitrate: 5000000 },
@@ -58,7 +71,7 @@ async function showNavigationBar() {
 }
 
 export default function PlayerScreen() {
-  const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
   const navigation = useNavigation<PlayerNavigationProp>();
   const route = useRoute<PlayerRouteProp>();
   const { channelId } = route.params;
@@ -82,7 +95,9 @@ export default function PlayerScreen() {
       .filter((id) => id !== channelId)
       .slice(0, 4)
       .map((id) => getChannelById(id))
-      .filter((ch) => ch !== undefined) as NonNullable<ReturnType<typeof getChannelById>>[];
+      .filter((ch) => ch !== undefined) as NonNullable<
+      ReturnType<typeof getChannelById>
+    >[];
   }, [recentChannels, channelId, playlist, getChannelById]);
 
   useEffect(() => {
@@ -110,32 +125,38 @@ export default function PlayerScreen() {
     await toggleFavorite(channelId);
   }, [channelId, toggleFavorite]);
 
-  const handleChannelNav = useCallback((direction: "prev" | "next") => {
-    if (!playlist) return;
+  const handleChannelNav = useCallback(
+    (direction: "prev" | "next") => {
+      if (!playlist) return;
 
-    const currentIndex = playlist.channels.findIndex(
-      (ch) => ch.id === channelId
-    );
-    if (currentIndex === -1) return;
+      const currentIndex = playlist.channels.findIndex(
+        (ch) => ch.id === channelId,
+      );
+      if (currentIndex === -1) return;
 
-    let newIndex: number;
-    if (direction === "prev") {
-      newIndex =
-        currentIndex === 0 ? playlist.channels.length - 1 : currentIndex - 1;
-    } else {
-      newIndex =
-        currentIndex === playlist.channels.length - 1 ? 0 : currentIndex + 1;
-    }
+      let newIndex: number;
+      if (direction === "prev") {
+        newIndex =
+          currentIndex === 0 ? playlist.channels.length - 1 : currentIndex - 1;
+      } else {
+        newIndex =
+          currentIndex === playlist.channels.length - 1 ? 0 : currentIndex + 1;
+      }
 
-    const newChannel = playlist.channels[newIndex];
-    if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    navigation.replace("Player", { channelId: newChannel.id });
-  }, [playlist, channelId, navigation]);
+      const newChannel = playlist.channels[newIndex];
+      if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      navigation.replace("Player", { channelId: newChannel.id });
+    },
+    [playlist, channelId, navigation],
+  );
 
-  const handleChannelSelect = useCallback((selectedChannelId: string) => {
-    if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    navigation.replace("Player", { channelId: selectedChannelId });
-  }, [navigation]);
+  const handleChannelSelect = useCallback(
+    (selectedChannelId: string) => {
+      if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      navigation.replace("Player", { channelId: selectedChannelId });
+    },
+    [navigation],
+  );
 
   const handleError = useCallback((error: string) => {
     console.error("Player error:", error);
@@ -152,7 +173,9 @@ export default function PlayerScreen() {
     };
   }, [channel]);
 
-  const getStreamHeaders = useCallback((): Record<string, string> | undefined => {
+  const getStreamHeaders = useCallback(():
+    | Record<string, string>
+    | undefined => {
     const streamHeaders: Record<string, string> = {};
     if (channel?.headers) {
       Object.assign(streamHeaders, channel.headers);
@@ -191,7 +214,7 @@ export default function PlayerScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { width, height }]}>
       <StatusBar hidden translucent backgroundColor="transparent" />
       <AdvancedVideoPlayer
         source={channel.url}
@@ -218,8 +241,8 @@ export default function PlayerScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     backgroundColor: "#000000",
+    overflow: "hidden",
   },
   errorContainer: {
     justifyContent: "center",

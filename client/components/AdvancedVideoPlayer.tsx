@@ -18,6 +18,7 @@ import {
   PermissionsAndroid,
   findNodeHandle,
   DeviceEventEmitter,
+  useWindowDimensions,
 } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
@@ -219,7 +220,10 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   useKeepAwake();
 
   const insets = useSafeAreaInsets();
-  const { playerControls, isUltraWide, width } = useResponsive();
+  const { playerControls, isUltraWide } = useResponsive();
+  // useWindowDimensions updates immediately on rotation; Dimensions.get('screen')
+  // used by useResponsive can lag or return physical screen size on Android.
+  const { width, height } = useWindowDimensions();
 
   // ── Refs ─────────────────────────────────────────────────────────────────
   const tvPlayerRef = useRef<any>(null);
@@ -235,6 +239,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   const backBtnRef = useRef<any>(null);
   const playPauseBtnRef = useRef<any>(null);
   const seekBarRef = useRef<any>(null);
+  const seekBarWidthRef = useRef<number>(1); // actual rendered width, updated via onLayout
   const firstToolBtnRef = useRef<any>(null);
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -697,7 +702,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <GestureHandlerRootView style={st.root}>
+    <GestureHandlerRootView style={[st.root, { width, height }]}>
       <StatusBar hidden />
 
       {/* ── Video surface ───────────────────────────────────────────── */}
@@ -1149,17 +1154,17 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                   onBlur={() => setSeekBarFocused(false)}
                   nextFocusUp={nh.playPause ?? undefined}
                   nextFocusDown={nh.firstTool ?? undefined}
+                  onLayout={(e) => {
+                    seekBarWidthRef.current = e.nativeEvent.layout.width || 1;
+                  }}
                   onPress={(e) => {
-                    const barWidth =
-                      width -
-                      insets.left -
-                      insets.right -
-                      Spacing.md * 2 -
-                      48 * 2;
                     handleSeekToPercent(
                       Math.min(
                         1,
-                        Math.max(0, e.nativeEvent.locationX / barWidth),
+                        Math.max(
+                          0,
+                          e.nativeEvent.locationX / seekBarWidthRef.current,
+                        ),
                       ),
                     );
                   }}

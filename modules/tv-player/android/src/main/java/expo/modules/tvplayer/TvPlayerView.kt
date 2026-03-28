@@ -45,11 +45,17 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
         .hasSystemFeature("android.hardware.type.television") ||
         context.packageManager.hasSystemFeature("android.software.leanback")
 
-    // AspectRatioFrameLayout is the Media3-UI container that resizes itself to
-    // match the video's actual aspect ratio — prevents the stretch-to-fill
-    // that happens when a bare SurfaceView/TextureView fills its parent.
+    // AspectRatioFrameLayout resizes itself inside onMeasure to match the video
+    // aspect ratio. It needs MATCH_PARENT so it receives the full available
+    // size from its parent (TvPlayerView) to adjust from.
+    // RESIZE_MODE_FIT = contain (letterbox), RESIZE_MODE_ZOOM = cover (crop),
+    // RESIZE_MODE_FILL = stretch to fill.
+    // Default aspect ratio 16:9 is set immediately so the view letterboxes
+    // even before onVideoSizeChanged fires — without this, videoAspectRatio
+    // stays 0 and onMeasure returns early, leaving the TextureView stretched.
     private val aspectFrame = AspectRatioFrameLayout(context).apply {
-        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT   // "contain" — default
+        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+        setAspectRatio(16f / 9f)
         layoutParams = FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT,
