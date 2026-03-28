@@ -28,7 +28,10 @@ import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 type SetupRouteProp = RouteProp<RootStackParamList, "Setup">;
-type SetupNavigationProp = NativeStackNavigationProp<RootStackParamList, "Setup">;
+type SetupNavigationProp = NativeStackNavigationProp<
+  RootStackParamList,
+  "Setup"
+>;
 
 export default function SetupScreen() {
   const insets = useSafeAreaInsets();
@@ -37,7 +40,12 @@ export default function SetupScreen() {
   const fromSettings = route.params?.fromSettings ?? false;
   const { theme, isDark } = useTheme();
   const { isPortrait, isLandscape, width, height } = useOrientation();
-  const { loadPlaylistFromUrl, loadPlaylistFromFile, isLoadingPlaylist, cancelLoading } = usePlaylist();
+  const {
+    loadPlaylistFromUrl,
+    loadPlaylistFromFile,
+    isLoadingPlaylist,
+    cancelLoading,
+  } = usePlaylist();
 
   const [playlistName, setPlaylistName] = useState("");
   const [url, setUrl] = useState("");
@@ -82,7 +90,8 @@ export default function SetupScreen() {
       setLoadingProgress("Fetching playlist...");
 
       await loadPlaylistFromUrl(url.trim(), playlistName.trim());
-      if (!isTVDevice) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (!isTVDevice)
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowLoadingModal(false);
       if (fromSettings) {
         navigation.goBack();
@@ -91,7 +100,8 @@ export default function SetupScreen() {
       }
     } catch (err: any) {
       setError(err.message || "Failed to load playlist");
-      if (!isTVDevice) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (!isTVDevice)
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setShowLoadingModal(false);
     } finally {
       setLoadingType(null);
@@ -107,7 +117,12 @@ export default function SetupScreen() {
     try {
       setError(null);
       const result = await DocumentPicker.getDocumentAsync({
-        type: ["application/x-mpegurl", "audio/x-mpegurl", "audio/mpegurl", "application/vnd.apple.mpegurl"],
+        type: [
+          "application/x-mpegurl",
+          "audio/x-mpegurl",
+          "audio/mpegurl",
+          "application/vnd.apple.mpegurl",
+        ],
         copyToCacheDirectory: true,
       });
 
@@ -125,7 +140,8 @@ export default function SetupScreen() {
       const content = await FileSystem.readAsStringAsync(file.uri);
 
       await loadPlaylistFromFile(content, playlistName.trim());
-      if (!isTVDevice) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (!isTVDevice)
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowLoadingModal(false);
       if (fromSettings) {
         navigation.goBack();
@@ -137,7 +153,8 @@ export default function SetupScreen() {
       }
     } catch (err: any) {
       setError(err.message || "Failed to load file");
-      if (!isTVDevice) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (!isTVDevice)
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setShowLoadingModal(false);
     } finally {
       setLoadingType(null);
@@ -157,10 +174,12 @@ export default function SetupScreen() {
             onPress={handleClose}
             onFocus={() => setIsCloseFocused(true)}
             onBlur={() => setIsCloseFocused(false)}
-            style={[
-              styles.closeButton,
-              isCloseFocused && styles.closeButtonFocused,
-            ] as ViewStyle[]}
+            style={
+              [
+                styles.closeButton,
+                isCloseFocused && styles.closeButtonFocused,
+              ] as ViewStyle[]
+            }
             hitSlop={16}
             focusable={true}
             accessibilityLabel="Close"
@@ -168,7 +187,9 @@ export default function SetupScreen() {
           >
             <Ionicons name="close" size={28} color={theme.text} />
           </Pressable>
-          <ThemedText type="h4" style={styles.headerTitle}>Add Playlist</ThemedText>
+          <ThemedText type="h4" style={styles.headerTitle}>
+            Add Playlist
+          </ThemedText>
           <View style={styles.closeButton} />
         </View>
       ) : null}
@@ -184,11 +205,28 @@ export default function SetupScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.content, isLandscape ? styles.contentWide : styles.contentNarrow]}>
+        <View
+          style={[
+            styles.content,
+            isLandscape ? styles.contentWide : styles.contentNarrow,
+          ]}
+        >
           {!fromSettings ? (
-            <View style={[styles.branding, isCompact && styles.brandingCompact]}>
-              <View style={[styles.iconContainer, isCompact && styles.iconContainerCompact, { backgroundColor: theme.primary + "20" }]}>
-                <Ionicons name="prism" size={isCompact ? 36 : 44} color={theme.primary} />
+            <View
+              style={[styles.branding, isCompact && styles.brandingCompact]}
+            >
+              <View
+                style={[
+                  styles.iconContainer,
+                  isCompact && styles.iconContainerCompact,
+                  { backgroundColor: theme.primary + "20" },
+                ]}
+              >
+                <Ionicons
+                  name="prism"
+                  size={isCompact ? 36 : 44}
+                  color={theme.primary}
+                />
               </View>
               <ThemedText type={isCompact ? "h2" : "h1"} style={styles.title}>
                 Prysm
@@ -204,126 +242,196 @@ export default function SetupScreen() {
             </View>
           ) : null}
 
-          <View style={[styles.form, isLandscape ? styles.formWide : styles.formNarrow]}>
-              <View style={[styles.inputSection, { maxWidth: isLandscape ? 320 : 400 }]}>
-                <ThemedText type="h4" style={[styles.sectionTitle, isCompact && styles.sectionTitleCompact]}>
-                  Playlist Name
-                </ThemedText>
-                <View
-                  style={[
-                    styles.inputContainer,
-                    { backgroundColor: theme.backgroundDefault, borderColor: theme.backgroundSecondary },
-                    isCompact && styles.inputContainerCompact,
-                  ]}
-                >
-                  <Ionicons
-                    name="bookmark"
-                    size={18}
-                    color={theme.textSecondary}
-                    style={styles.inputIcon}
-                  />
-                  <TextInput
-                    value={playlistName}
-                    onChangeText={setPlaylistName}
-                    placeholder="My Playlist"
-                    placeholderTextColor={theme.textSecondary}
-                    style={[styles.input, { color: theme.text }]}
-                    autoCapitalize="words"
-                    autoCorrect={false}
-                    returnKeyType="next"
-                    editable={!isLoadingPlaylist}
-                    testID="name-input"
-                  />
-                </View>
-
-                <ThemedText type="h4" style={[styles.sectionTitle, isCompact && styles.sectionTitleCompact]}>
-                  Enter Playlist URL
-                </ThemedText>
-                <View
-                  style={[
-                    styles.inputContainer,
-                    { backgroundColor: theme.backgroundDefault, borderColor: theme.backgroundSecondary },
-                    isCompact && styles.inputContainerCompact,
-                  ]}
-                >
-                  <Ionicons
-                    name="link"
-                    size={18}
-                    color={theme.textSecondary}
-                    style={styles.inputIcon}
-                  />
-                  <TextInput
-                    value={url}
-                    onChangeText={setUrl}
-                    placeholder="https://example.com/playlist"
-                    placeholderTextColor={theme.textSecondary}
-                    style={[styles.input, { color: theme.text }]}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    keyboardType="url"
-                    returnKeyType="done"
-                    onSubmitEditing={handleLoadFromUrl}
-                    editable={!isLoadingPlaylist}
-                    testID="url-input"
-                  />
-                </View>
-
-                <Button
-                  onPress={handleLoadFromUrl}
-                  disabled={isLoadingPlaylist || !url.trim() || !playlistName.trim()}
-                  style={[styles.button, isCompact && styles.buttonCompact]}
-                >
-                  {loadingType === "url" ? (
-                    <ActivityIndicator size="small" color={theme.buttonText} />
-                  ) : (
-                    "Load Playlist"
-                  )}
-                </Button>
-
-                <View style={[styles.dividerContainer, isLandscape ? styles.dividerWide : styles.dividerNarrow]}>
-                  <View style={[styles.divider, { backgroundColor: theme.backgroundSecondary }]} />
-                  <ThemedText
-                    type="small"
-                    style={[styles.dividerText, { color: theme.textSecondary }]}
-                  >
-                    OR
-                  </ThemedText>
-                  <View style={[styles.divider, { backgroundColor: theme.backgroundSecondary }]} />
-                </View>
-
-                <Pressable
-                  onPress={handleLoadFromFile}
-                  onFocus={() => setIsFileFocused(true)}
-                  onBlur={() => setIsFileFocused(false)}
-                  disabled={isLoadingPlaylist || !playlistName.trim()}
-                  focusable={!isLoadingPlaylist && !!playlistName.trim()}
-                  accessibilityLabel="Choose file"
-                  accessibilityRole="button"
-                  style={[
-                    styles.fileButton,
-                    { backgroundColor: theme.backgroundDefault, borderColor: theme.primary + "40" },
-                    isCompact && styles.fileButtonCompact,
-                    isFileFocused && styles.fileButtonFocused,
-                  ] as ViewStyle[]}
-                  testID="file-picker-btn"
-                >
-                  {loadingType === "file" ? (
-                    <ActivityIndicator size="small" color={theme.primary} />
-                  ) : (
-                    <>
-                      <Ionicons name="cloud-upload" size={22} color={theme.primary} />
-                      <ThemedText type="small" style={styles.fileButtonText}>
-                        Choose File
-                      </ThemedText>
-                    </>
-                  )}
-                </Pressable>
+          <View
+            style={[
+              styles.form,
+              isLandscape ? styles.formWide : styles.formNarrow,
+            ]}
+          >
+            <View
+              style={[
+                styles.inputSection,
+                { maxWidth: isLandscape ? 320 : 400 },
+              ]}
+            >
+              <ThemedText
+                type="h4"
+                style={[
+                  styles.sectionTitle,
+                  isCompact && styles.sectionTitleCompact,
+                ]}
+              >
+                Playlist Name
+              </ThemedText>
+              <View
+                style={[
+                  styles.inputContainer,
+                  {
+                    backgroundColor: theme.backgroundDefault,
+                    borderColor: theme.backgroundSecondary,
+                  },
+                  isCompact && styles.inputContainerCompact,
+                ]}
+              >
+                <Ionicons
+                  name="bookmark"
+                  size={18}
+                  color={theme.textSecondary}
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  value={playlistName}
+                  onChangeText={setPlaylistName}
+                  placeholder="My Playlist"
+                  placeholderTextColor={theme.textSecondary}
+                  style={[styles.input, { color: theme.text }]}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  returnKeyType="next"
+                  editable={!isLoadingPlaylist}
+                  showSoftInputOnFocus={true}
+                  testID="name-input"
+                />
               </View>
+
+              <ThemedText
+                type="h4"
+                style={[
+                  styles.sectionTitle,
+                  isCompact && styles.sectionTitleCompact,
+                ]}
+              >
+                Enter Playlist URL
+              </ThemedText>
+              <View
+                style={[
+                  styles.inputContainer,
+                  {
+                    backgroundColor: theme.backgroundDefault,
+                    borderColor: theme.backgroundSecondary,
+                  },
+                  isCompact && styles.inputContainerCompact,
+                ]}
+              >
+                <Ionicons
+                  name="link"
+                  size={18}
+                  color={theme.textSecondary}
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  value={url}
+                  onChangeText={setUrl}
+                  placeholder="https://example.com/playlist"
+                  placeholderTextColor={theme.textSecondary}
+                  style={[styles.input, { color: theme.text }]}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  returnKeyType="done"
+                  onSubmitEditing={handleLoadFromUrl}
+                  editable={!isLoadingPlaylist}
+                  showSoftInputOnFocus={true}
+                  testID="url-input"
+                />
+              </View>
+
+              <Button
+                onPress={handleLoadFromUrl}
+                disabled={
+                  isLoadingPlaylist || !url.trim() || !playlistName.trim()
+                }
+                style={[styles.button, isCompact && styles.buttonCompact]}
+                hasTVPreferredFocus={isTVDevice}
+              >
+                {loadingType === "url" ? (
+                  <ActivityIndicator size="small" color={theme.buttonText} />
+                ) : (
+                  "Load Playlist"
+                )}
+              </Button>
+
+              {/* File picker is not usable on TV — hide it */}
+              {!isTVDevice ? (
+                <>
+                  <View
+                    style={[
+                      styles.dividerContainer,
+                      isLandscape ? styles.dividerWide : styles.dividerNarrow,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.divider,
+                        { backgroundColor: theme.backgroundSecondary },
+                      ]}
+                    />
+                    <ThemedText
+                      type="small"
+                      style={[
+                        styles.dividerText,
+                        { color: theme.textSecondary },
+                      ]}
+                    >
+                      OR
+                    </ThemedText>
+                    <View
+                      style={[
+                        styles.divider,
+                        { backgroundColor: theme.backgroundSecondary },
+                      ]}
+                    />
+                  </View>
+
+                  <Pressable
+                    onPress={handleLoadFromFile}
+                    onFocus={() => setIsFileFocused(true)}
+                    onBlur={() => setIsFileFocused(false)}
+                    disabled={isLoadingPlaylist || !playlistName.trim()}
+                    focusable={!isLoadingPlaylist && !!playlistName.trim()}
+                    accessibilityLabel="Choose file"
+                    accessibilityRole="button"
+                    style={
+                      [
+                        styles.fileButton,
+                        {
+                          backgroundColor: theme.backgroundDefault,
+                          borderColor: theme.primary + "40",
+                        },
+                        isCompact && styles.fileButtonCompact,
+                        isFileFocused && styles.fileButtonFocused,
+                      ] as ViewStyle[]
+                    }
+                    testID="file-picker-btn"
+                  >
+                    {loadingType === "file" ? (
+                      <ActivityIndicator size="small" color={theme.primary} />
+                    ) : (
+                      <>
+                        <Ionicons
+                          name="cloud-upload"
+                          size={22}
+                          color={theme.primary}
+                        />
+                        <ThemedText type="small" style={styles.fileButtonText}>
+                          Choose File
+                        </ThemedText>
+                      </>
+                    )}
+                  </Pressable>
+                </>
+              ) : null}
+            </View>
           </View>
         </View>
 
         {error ? (
-          <View style={[styles.errorContainer, { backgroundColor: Colors.dark.error + "20" }]}>
+          <View
+            style={[
+              styles.errorContainer,
+              { backgroundColor: Colors.dark.error + "20" },
+            ]}
+          >
             <Ionicons name="alert-circle" size={14} color={Colors.dark.error} />
             <ThemedText
               type="small"
@@ -335,13 +443,14 @@ export default function SetupScreen() {
         ) : null}
       </ScrollView>
 
-      <Modal
-        visible={showLoadingModal}
-        transparent
-        animationType="fade"
-      >
+      <Modal visible={showLoadingModal} transparent animationType="fade">
         <View style={styles.loadingModal}>
-          <View style={[styles.loadingContent, { backgroundColor: theme.backgroundDefault }]}>
+          <View
+            style={[
+              styles.loadingContent,
+              { backgroundColor: theme.backgroundDefault },
+            ]}
+          >
             <ActivityIndicator size="large" color={theme.primary} />
             <ThemedText type="body" style={styles.loadingText}>
               {loadingProgress}
@@ -356,11 +465,13 @@ export default function SetupScreen() {
               focusable={true}
               accessibilityLabel="Cancel loading"
               accessibilityRole="button"
-              style={[
-                styles.cancelButton,
-                { borderColor: theme.textSecondary + "40" },
-                isCancelFocused && styles.cancelButtonFocused,
-              ] as ViewStyle[]}
+              style={
+                [
+                  styles.cancelButton,
+                  { borderColor: theme.textSecondary + "40" },
+                  isCancelFocused && styles.cancelButtonFocused,
+                ] as ViewStyle[]
+              }
             >
               <ThemedText type="body" style={{ color: theme.textSecondary }}>
                 Cancel

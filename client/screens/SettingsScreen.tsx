@@ -659,81 +659,140 @@ export default function SettingsScreen() {
               </ThemedText>
             ) : (
               playlists.map((p) => (
-                <View key={p.id} style={styles.playlistRow}>
-                  <FocusablePressable
-                    onPress={() => handlePlaylistSelect(p.id)}
-                    accessibilityLabel={`Select playlist ${p.name}`}
-                    baseStyle={[
-                      styles.playlistItem,
-                      {
-                        backgroundColor:
-                          p.id === activePlaylistId
-                            ? theme.primary + "20"
-                            : "transparent",
-                      },
-                    ]}
-                    focusedStyle={styles.modalOptionFocused}
-                  >
-                    <View style={styles.playlistInfo}>
-                      <Ionicons
-                        name="list"
-                        size={18}
-                        color={
-                          p.id === activePlaylistId
-                            ? theme.primary
-                            : theme.textSecondary
-                        }
-                      />
-                      <View style={styles.playlistText}>
-                        <ThemedText type="body" numberOfLines={1}>
-                          {p.name}
-                        </ThemedText>
-                        <ThemedText
-                          type="caption"
-                          style={{ color: theme.textSecondary }}
-                        >
-                          {p.channelCount} channels
-                        </ThemedText>
+                <View key={p.id} style={styles.playlistGroup}>
+                  {/* Playlist select row */}
+                  <View style={styles.playlistRow}>
+                    <FocusablePressable
+                      onPress={() => handlePlaylistSelect(p.id)}
+                      accessibilityLabel={`Select playlist ${p.name}`}
+                      baseStyle={[
+                        styles.playlistItem,
+                        {
+                          backgroundColor:
+                            p.id === activePlaylistId
+                              ? theme.primary + "20"
+                              : "transparent",
+                        },
+                      ]}
+                      focusedStyle={styles.modalOptionFocused}
+                    >
+                      <View style={styles.playlistInfo}>
+                        <Ionicons
+                          name="list"
+                          size={18}
+                          color={
+                            p.id === activePlaylistId
+                              ? theme.primary
+                              : theme.textSecondary
+                          }
+                        />
+                        <View style={styles.playlistText}>
+                          <ThemedText type="body" numberOfLines={1}>
+                            {p.name}
+                          </ThemedText>
+                          <ThemedText
+                            type="caption"
+                            style={{ color: theme.textSecondary }}
+                          >
+                            {p.channelCount} channels
+                          </ThemedText>
+                        </View>
                       </View>
-                    </View>
-                    {p.id === activePlaylistId ? (
-                      <Ionicons
-                        name="checkmark"
-                        size={20}
-                        color={theme.primary}
-                      />
+                      {p.id === activePlaylistId ? (
+                        <Ionicons
+                          name="checkmark"
+                          size={20}
+                          color={theme.primary}
+                        />
+                      ) : null}
+                    </FocusablePressable>
+                    {/* On phone: icon buttons inline */}
+                    {!isTV ? (
+                      <>
+                        <FocusablePressable
+                          onPress={() => handleEditPlaylist(p.id)}
+                          hitSlop={8}
+                          accessibilityLabel={`Edit playlist ${p.name}`}
+                          baseStyle={styles.editButton}
+                          focusedStyle={styles.editButtonFocused}
+                        >
+                          <Ionicons
+                            name="create-outline"
+                            size={18}
+                            color={theme.primary}
+                          />
+                        </FocusablePressable>
+                        <FocusablePressable
+                          onPress={() => {
+                            setPlaylistToDelete(p.id);
+                            setShowPlaylistModal(false);
+                            setShowDeletePlaylistModal(true);
+                          }}
+                          hitSlop={8}
+                          accessibilityLabel={`Delete playlist ${p.name}`}
+                          baseStyle={styles.deleteButton}
+                          focusedStyle={styles.deleteButtonFocused}
+                        >
+                          <Ionicons
+                            name="trash-outline"
+                            size={18}
+                            color={Colors.dark.error}
+                          />
+                        </FocusablePressable>
+                      </>
                     ) : null}
-                  </FocusablePressable>
-                  <FocusablePressable
-                    onPress={() => handleEditPlaylist(p.id)}
-                    hitSlop={8}
-                    accessibilityLabel={`Edit playlist ${p.name}`}
-                    baseStyle={styles.editButton}
-                    focusedStyle={styles.editButtonFocused}
-                  >
-                    <Ionicons
-                      name="create-outline"
-                      size={18}
-                      color={theme.primary}
-                    />
-                  </FocusablePressable>
-                  <FocusablePressable
-                    onPress={() => {
-                      setPlaylistToDelete(p.id);
-                      setShowPlaylistModal(false);
-                      setShowDeletePlaylistModal(true);
-                    }}
-                    hitSlop={8}
-                    accessibilityLabel={`Delete playlist ${p.name}`}
-                    baseStyle={styles.deleteButton}
-                    focusedStyle={styles.deleteButtonFocused}
-                  >
-                    <Ionicons
-                      name="trash-outline"
-                      size={18}
-                      color={Colors.dark.error}
-                    />
-                  </FocusablePressable>
+                  </View>
+                  {/* On TV: full-width Edit / Delete buttons below each row */}
+                  {isTV ? (
+                    <View style={styles.tvPlaylistActions}>
+                      <FocusablePressable
+                        onPress={() => handleEditPlaylist(p.id)}
+                        accessibilityLabel={`Edit playlist ${p.name}`}
+                        baseStyle={styles.tvActionButton}
+                        focusedStyle={styles.tvActionButtonFocused}
+                      >
+                        <Ionicons
+                          name="create-outline"
+                          size={16}
+                          color={theme.primary}
+                        />
+                        <ThemedText
+                          type="small"
+                          style={{
+                            color: theme.primary,
+                            marginLeft: Spacing.xs,
+                          }}
+                        >
+                          Edit
+                        </ThemedText>
+                      </FocusablePressable>
+                      <FocusablePressable
+                        onPress={() => {
+                          setPlaylistToDelete(p.id);
+                          setShowPlaylistModal(false);
+                          setShowDeletePlaylistModal(true);
+                        }}
+                        accessibilityLabel={`Delete playlist ${p.name}`}
+                        baseStyle={styles.tvActionButton}
+                        focusedStyle={styles.tvActionButtonDestructiveFocused}
+                      >
+                        <Ionicons
+                          name="trash-outline"
+                          size={16}
+                          color={Colors.dark.error}
+                        />
+                        <ThemedText
+                          type="small"
+                          style={{
+                            color: Colors.dark.error,
+                            marginLeft: Spacing.xs,
+                          }}
+                        >
+                          Delete
+                        </ThemedText>
+                      </FocusablePressable>
+                    </View>
+                  ) : null}
                 </View>
               ))
             )}
@@ -1015,9 +1074,39 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: Spacing.md,
   },
+  playlistGroup: {
+    marginBottom: Spacing.xs,
+  },
   playlistRow: {
     flexDirection: "row",
     alignItems: "center",
+  },
+  tvPlaylistActions: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    marginTop: 2,
+    marginBottom: Spacing.sm,
+  },
+  tvActionButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.xs,
+    borderWidth: 2,
+    borderColor: "transparent",
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  tvActionButtonFocused: {
+    borderColor: Colors.dark.primary,
+    backgroundColor: Colors.dark.primary + "20",
+    transform: [{ scale: 1.03 }],
+  },
+  tvActionButtonDestructiveFocused: {
+    borderColor: Colors.dark.error,
+    backgroundColor: Colors.dark.error + "20",
+    transform: [{ scale: 1.03 }],
   },
   playlistItem: {
     flex: 1,

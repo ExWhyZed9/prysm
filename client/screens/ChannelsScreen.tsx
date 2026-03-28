@@ -54,6 +54,7 @@ function FocusableCategoryItem({
   onPress,
   onFavoritePress,
   theme,
+  hasTVPreferredFocus,
 }: {
   cat: string;
   isSelected: boolean;
@@ -62,16 +63,27 @@ function FocusableCategoryItem({
   onPress: () => void;
   onFavoritePress: (cat: string, e: any) => void;
   theme: any;
+  hasTVPreferredFocus?: boolean;
 }) {
   const [isFocused, setIsFocused] = useState(false);
   const [isFavFocused, setIsFavFocused] = useState(false);
 
+  const tvProps: any = {};
+  if (hasTVPreferredFocus) tvProps.hasTVPreferredFocus = true;
+
   return (
     <Pressable
       onPress={onPress}
+      // On TV: long-press the category item to toggle favourite (since the
+      // star button is not separately focusable on TV)
+      onLongPress={
+        isTV && cat !== "All" ? () => onFavoritePress(cat, {}) : undefined
+      }
+      delayLongPress={500}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
       focusable={true}
+      {...tvProps}
       style={
         [
           styles.categoryItem,
@@ -132,7 +144,8 @@ function FocusableCategoryItem({
               ] as ViewStyle[]
             }
             hitSlop={8}
-            focusable={true}
+            // Not focusable on TV — favourite via long-press on the row instead
+            focusable={!isTV}
             accessibilityLabel={
               isFav ? `Remove ${cat} from favorites` : `Add ${cat} to favorites`
             }
@@ -666,7 +679,7 @@ export default function ChannelsScreen() {
 
             <FlashList
               data={categories}
-              renderItem={({ item: cat }) => {
+              renderItem={({ item: cat, index }) => {
                 const isSelected = selectedCategory === cat;
                 const isFav = isCategoryFavorite(cat);
                 const count = categoryChannelCounts[cat] || 0;
@@ -680,6 +693,7 @@ export default function ChannelsScreen() {
                     onPress={() => handleCategoryChange(cat)}
                     onFavoritePress={handleCategoryFavoritePress}
                     theme={theme}
+                    hasTVPreferredFocus={isTV && index === 0}
                   />
                 );
               }}
