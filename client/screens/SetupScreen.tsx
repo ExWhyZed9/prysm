@@ -351,76 +351,68 @@ export default function SetupScreen() {
                 )}
               </Button>
 
-              {/* File picker is not usable on TV — hide it */}
-              {!isTVDevice ? (
-                <>
-                  <View
-                    style={[
-                      styles.dividerContainer,
-                      isLandscape ? styles.dividerWide : styles.dividerNarrow,
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.divider,
-                        { backgroundColor: theme.backgroundSecondary },
-                      ]}
-                    />
-                    <ThemedText
-                      type="small"
-                      style={[
-                        styles.dividerText,
-                        { color: theme.textSecondary },
-                      ]}
-                    >
-                      OR
-                    </ThemedText>
-                    <View
-                      style={[
-                        styles.divider,
-                        { backgroundColor: theme.backgroundSecondary },
-                      ]}
-                    />
-                  </View>
+              <View
+                style={[
+                  styles.dividerContainer,
+                  isLandscape ? styles.dividerWide : styles.dividerNarrow,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.divider,
+                    { backgroundColor: theme.backgroundSecondary },
+                  ]}
+                />
+                <ThemedText
+                  type="small"
+                  style={[styles.dividerText, { color: theme.textSecondary }]}
+                >
+                  OR
+                </ThemedText>
+                <View
+                  style={[
+                    styles.divider,
+                    { backgroundColor: theme.backgroundSecondary },
+                  ]}
+                />
+              </View>
 
-                  <Pressable
-                    onPress={handleLoadFromFile}
-                    onFocus={() => setIsFileFocused(true)}
-                    onBlur={() => setIsFileFocused(false)}
-                    disabled={isLoadingPlaylist || !playlistName.trim()}
-                    focusable={!isLoadingPlaylist && !!playlistName.trim()}
-                    accessibilityLabel="Choose file"
-                    accessibilityRole="button"
-                    style={
-                      [
-                        styles.fileButton,
-                        {
-                          backgroundColor: theme.backgroundDefault,
-                          borderColor: theme.primary + "40",
-                        },
-                        isCompact && styles.fileButtonCompact,
-                        isFileFocused && styles.fileButtonFocused,
-                      ] as ViewStyle[]
-                    }
-                    testID="file-picker-btn"
-                  >
-                    {loadingType === "file" ? (
-                      <ActivityIndicator size="small" color={theme.primary} />
-                    ) : (
-                      <>
-                        <Ionicons
-                          name="cloud-upload"
-                          size={22}
-                          color={theme.primary}
-                        />
-                        <ThemedText type="small" style={styles.fileButtonText}>
-                          Choose File
-                        </ThemedText>
-                      </>
-                    )}
-                  </Pressable>
-                </>
-              ) : null}
+              <Pressable
+                onPress={handleLoadFromFile}
+                onFocus={() => setIsFileFocused(true)}
+                onBlur={() => setIsFileFocused(false)}
+                disabled={isLoadingPlaylist || !playlistName.trim()}
+                focusable={!isLoadingPlaylist && !!playlistName.trim()}
+                accessibilityLabel="Choose file"
+                accessibilityRole="button"
+                style={
+                  [
+                    styles.fileButton,
+                    {
+                      backgroundColor: theme.backgroundDefault,
+                      borderColor: theme.primary + "40",
+                    },
+                    isCompact && styles.fileButtonCompact,
+                    isFileFocused && styles.fileButtonFocused,
+                  ] as ViewStyle[]
+                }
+                testID="file-picker-btn"
+              >
+                {loadingType === "file" ? (
+                  <ActivityIndicator size="small" color={theme.primary} />
+                ) : (
+                  <>
+                    <Ionicons
+                      name="cloud-upload"
+                      size={22}
+                      color={theme.primary}
+                    />
+                    <ThemedText type="small" style={styles.fileButtonText}>
+                      Choose File
+                    </ThemedText>
+                  </>
+                )}
+              </Pressable>
             </View>
           </View>
         </View>

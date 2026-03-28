@@ -98,7 +98,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   videoQuality: "auto",
   showCategoryFilter: true,
   autoRefreshInterval: "off",
-  rememberLastCategory: false,
+  rememberLastCategory: true,
   lastCategory: "All",
   textSize: "medium",
 };

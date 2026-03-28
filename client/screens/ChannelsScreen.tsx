@@ -403,7 +403,9 @@ export default function ChannelsScreen() {
 
   const handleCategoryFavoritePress = useCallback(
     async (category: string, e: any) => {
-      e.stopPropagation();
+      // stopPropagation is only available on real touch events (phone).
+      // On TV long-press we pass an empty object so guard before calling.
+      if (e?.stopPropagation) e.stopPropagation();
       await toggleFavoriteCategory(category);
       if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     },

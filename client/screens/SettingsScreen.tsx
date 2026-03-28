@@ -35,14 +35,18 @@ function FocusableOption({
   style,
   children,
   accessibilityLabel,
+  hasTVPreferredFocus,
 }: {
   onPress: () => void;
   isSelected?: boolean;
   style?: ViewStyle;
   children: React.ReactNode;
   accessibilityLabel?: string;
+  hasTVPreferredFocus?: boolean;
 }) {
   const [isFocused, setIsFocused] = useState(false);
+  const tvProps: any = {};
+  if (hasTVPreferredFocus) tvProps.hasTVPreferredFocus = true;
   return (
     <Pressable
       onPress={onPress}
@@ -51,6 +55,7 @@ function FocusableOption({
       focusable={true}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      {...tvProps}
       style={
         [
           styles.modalOption,
@@ -74,6 +79,7 @@ function FocusablePressable({
   children,
   hitSlop,
   accessibilityLabel,
+  hasTVPreferredFocus,
 }: {
   onPress: () => void;
   baseStyle: ViewStyle | ViewStyle[];
@@ -81,8 +87,11 @@ function FocusablePressable({
   children: React.ReactNode;
   hitSlop?: number;
   accessibilityLabel?: string;
+  hasTVPreferredFocus?: boolean;
 }) {
   const [isFocused, setIsFocused] = useState(false);
+  const tvProps: any = {};
+  if (hasTVPreferredFocus) tvProps.hasTVPreferredFocus = true;
   return (
     <Pressable
       onPress={onPress}
@@ -92,6 +101,7 @@ function FocusablePressable({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       hitSlop={hitSlop}
+      {...tvProps}
       style={
         [
           ...(Array.isArray(baseStyle) ? baseStyle : [baseStyle]),
@@ -159,6 +169,8 @@ export default function SettingsScreen() {
 
   const isTV = Platform.isTV;
   const useColumns = width > 700;
+  // On TV and very wide screens show two columns of settings side by side
+  const useTwoColumns = isTV || width > 900;
 
   const handleToggleAutoPlay = (value: boolean) => {
     if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -301,8 +313,13 @@ export default function SettingsScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.columns, !useColumns && styles.columnsSingle]}>
-          <View style={[styles.column, useColumns && styles.columnWide]}>
+        <View
+          style={
+            useTwoColumns ? styles.twoColumnLayout : styles.singleColumnLayout
+          }
+        >
+          {/* ── Left / only column ─────────────────────────────────── */}
+          <View style={useTwoColumns ? styles.twoColumnItem : styles.fullWidth}>
             <ThemedText
               type="small"
               style={[styles.sectionTitle, { color: theme.textSecondary }]}
@@ -372,7 +389,10 @@ export default function SettingsScreen() {
                 showChevron
               />
             </View>
+          </View>
 
+          {/* ── Right column (or continuation on single column) ─────── */}
+          <View style={useTwoColumns ? styles.twoColumnItem : styles.fullWidth}>
             <ThemedText
               type="small"
               style={[styles.sectionTitle, { color: theme.textSecondary }]}
@@ -479,6 +499,7 @@ export default function SettingsScreen() {
         <Pressable
           style={styles.modalOverlay}
           onPress={() => setShowQualityModal(false)}
+          focusable={!isTV}
         >
           <View
             style={[
@@ -489,12 +510,13 @@ export default function SettingsScreen() {
             <ThemedText type="h4" style={styles.modalTitle}>
               Video Quality
             </ThemedText>
-            {VIDEO_QUALITY_OPTIONS.map((option) => (
+            {VIDEO_QUALITY_OPTIONS.map((option, idx) => (
               <FocusableOption
                 key={option.value}
                 onPress={() => handleQualitySelect(option.value)}
                 isSelected={settings.videoQuality === option.value}
                 accessibilityLabel={option.label}
+                hasTVPreferredFocus={isTV && idx === 0}
               >
                 <ThemedText type="body">{option.label}</ThemedText>
                 {settings.videoQuality === option.value ? (
@@ -515,6 +537,7 @@ export default function SettingsScreen() {
         <Pressable
           style={styles.modalOverlay}
           onPress={() => setShowAutoRefreshModal(false)}
+          focusable={!isTV}
         >
           <View
             style={[
@@ -525,12 +548,13 @@ export default function SettingsScreen() {
             <ThemedText type="h4" style={styles.modalTitle}>
               Auto-Refresh Playlist
             </ThemedText>
-            {AUTO_REFRESH_OPTIONS.map((option) => (
+            {AUTO_REFRESH_OPTIONS.map((option, idx) => (
               <FocusableOption
                 key={option.value}
                 onPress={() => handleAutoRefreshSelect(option.value)}
                 isSelected={settings.autoRefreshInterval === option.value}
                 accessibilityLabel={option.label}
+                hasTVPreferredFocus={isTV && idx === 0}
               >
                 <ThemedText type="body">{option.label}</ThemedText>
                 {settings.autoRefreshInterval === option.value ? (
@@ -551,6 +575,7 @@ export default function SettingsScreen() {
         <Pressable
           style={styles.modalOverlay}
           onPress={() => setShowThemeModal(false)}
+          focusable={!isTV}
         >
           <View
             style={[
@@ -565,6 +590,7 @@ export default function SettingsScreen() {
               onPress={() => handleThemeSelect("dark")}
               isSelected={themeMode === "dark"}
               accessibilityLabel="Dark theme"
+              hasTVPreferredFocus={isTV}
             >
               <View style={styles.themeOption}>
                 <Ionicons name="moon" size={20} color={theme.text} />
@@ -600,6 +626,7 @@ export default function SettingsScreen() {
         <Pressable
           style={styles.modalOverlay}
           onPress={() => setShowTextSizeModal(false)}
+          focusable={!isTV}
         >
           <View
             style={[
@@ -610,12 +637,13 @@ export default function SettingsScreen() {
             <ThemedText type="h4" style={styles.modalTitle}>
               Text Size
             </ThemedText>
-            {TEXT_SIZE_OPTIONS.map((option) => (
+            {TEXT_SIZE_OPTIONS.map((option, idx) => (
               <FocusableOption
                 key={option.value}
                 onPress={() => handleTextSizeSelect(option.value)}
                 isSelected={settings.textSize === option.value}
                 accessibilityLabel={option.label}
+                hasTVPreferredFocus={isTV && idx === 0}
               >
                 <ThemedText type="body">{option.label}</ThemedText>
                 {settings.textSize === option.value ? (
@@ -636,6 +664,7 @@ export default function SettingsScreen() {
         <Pressable
           style={styles.modalOverlay}
           onPress={() => setShowPlaylistModal(false)}
+          focusable={!isTV}
         >
           <View
             style={[
@@ -658,13 +687,14 @@ export default function SettingsScreen() {
                 No playlists saved
               </ThemedText>
             ) : (
-              playlists.map((p) => (
+              playlists.map((p, idx) => (
                 <View key={p.id} style={styles.playlistGroup}>
                   {/* Playlist select row */}
                   <View style={styles.playlistRow}>
                     <FocusablePressable
                       onPress={() => handlePlaylistSelect(p.id)}
                       accessibilityLabel={`Select playlist ${p.name}`}
+                      hasTVPreferredFocus={isTV && idx === 0}
                       baseStyle={[
                         styles.playlistItem,
                         {
@@ -809,6 +839,7 @@ export default function SettingsScreen() {
         <Pressable
           style={styles.modalOverlay}
           onPress={() => setShowDeletePlaylistModal(false)}
+          focusable={!isTV}
         >
           <View
             style={[
@@ -836,6 +867,7 @@ export default function SettingsScreen() {
                   { backgroundColor: theme.backgroundSecondary },
                 ]}
                 textStyle={{ color: theme.text }}
+                hasTVPreferredFocus={isTV}
               >
                 Cancel
               </Button>
@@ -862,6 +894,7 @@ export default function SettingsScreen() {
         <Pressable
           style={styles.modalOverlay}
           onPress={() => setShowClearAllConfirm(false)}
+          focusable={!isTV}
         >
           <View
             style={[
@@ -890,6 +923,7 @@ export default function SettingsScreen() {
                   { backgroundColor: theme.backgroundSecondary },
                 ]}
                 textStyle={{ color: theme.text }}
+                hasTVPreferredFocus={isTV}
               >
                 Cancel
               </Button>
@@ -916,6 +950,7 @@ export default function SettingsScreen() {
         <Pressable
           style={styles.modalOverlay}
           onPress={() => setShowEditPlaylistModal(false)}
+          focusable={!isTV}
         >
           <View
             style={[
@@ -947,6 +982,9 @@ export default function SettingsScreen() {
                     borderColor: theme.backgroundSecondary,
                   },
                 ]}
+                showSoftInputOnFocus={true}
+                autoCapitalize="words"
+                autoCorrect={false}
               />
             </View>
             <View style={styles.editInputContainer}>
@@ -972,6 +1010,7 @@ export default function SettingsScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="url"
+                showSoftInputOnFocus={true}
               />
             </View>
             <View style={styles.confirmButtons}>
@@ -983,6 +1022,7 @@ export default function SettingsScreen() {
                 ]}
                 textStyle={{ color: theme.text }}
                 disabled={isLoadingPlaylist}
+                hasTVPreferredFocus={isTV}
               >
                 Cancel
               </Button>
@@ -1027,6 +1067,20 @@ const styles = StyleSheet.create({
     flex: 1,
     maxWidth: 450,
     width: "auto",
+  },
+  twoColumnLayout: {
+    flexDirection: "row",
+    gap: Spacing["2xl"],
+    alignItems: "flex-start",
+  },
+  singleColumnLayout: {
+    flexDirection: "column",
+  },
+  twoColumnItem: {
+    flex: 1,
+  },
+  fullWidth: {
+    width: "100%",
   },
   sectionTitle: {
     marginTop: Spacing.xl,
