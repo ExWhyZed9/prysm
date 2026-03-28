@@ -93,10 +93,8 @@ function FocusableCategoryItem({
               : "transparent",
           },
           isFocused && {
-            borderWidth: 2,
             borderColor: Colors.dark.primary,
             backgroundColor: Colors.dark.primary + "30",
-            transform: [{ scale: 1.02 }],
           },
         ] as ViewStyle[]
       }
@@ -700,6 +698,10 @@ export default function ChannelsScreen() {
                 );
               }}
               keyExtractor={(item) => item}
+              initialScrollIndex={Math.max(
+                0,
+                categories.indexOf(selectedCategory),
+              )}
               contentContainerStyle={{
                 paddingTop: Spacing.sm,
               }}
@@ -839,6 +841,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     marginHorizontal: Spacing.sm,
     borderRadius: BorderRadius.md,
+    // Always reserve borderWidth so focus colour change doesn't reflow
+    borderWidth: 2,
+    borderColor: "transparent",
   },
   categoryItemLeft: {
     flexDirection: "row",

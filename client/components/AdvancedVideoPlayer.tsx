@@ -2272,11 +2272,10 @@ const st = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.07)",
+    borderRadius: BorderRadius.xs,
     borderWidth: 2,
     borderColor: "transparent",
-    borderRadius: BorderRadius.xs,
+    marginBottom: 2,
   },
   settingsRowFocused: {
     borderColor: Colors.dark.primary,
@@ -2288,6 +2287,7 @@ const st = StyleSheet.create({
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.sm,
     borderRadius: BorderRadius.sm,
+    // borderWidth always reserved so focus colour change doesn't cause reflow
     borderWidth: 2,
     borderColor: "transparent",
     marginBottom: 2,
@@ -2297,8 +2297,9 @@ const st = StyleSheet.create({
   },
   optionRowFocused: {
     borderColor: Colors.dark.primary,
+    // No transform: scale — scaling inside ScrollView clips at container bounds
+    // causing a torn/clipped appearance on the focused item
     backgroundColor: Colors.dark.primary + "30",
-    transform: [{ scale: 1.02 }],
   },
   emptyState: {
     alignItems: "center",
