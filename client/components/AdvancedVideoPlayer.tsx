@@ -439,54 +439,61 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   // ── TV D-pad handler ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!isTV) return;
-    let handler: any = null;
-    try {
-      const RN = require("react-native");
-      const TVHandler = RN.TVEventHandler;
-      if (!TVHandler) return;
-      handler = new TVHandler();
-      handler.enable({} as any, (_: any, evt: any) => {
-        if (!evt) return;
-        const { eventType } = evt;
 
-        if (["up", "down", "left", "right", "playPause"].includes(eventType)) {
-          // Directional / play-pause keys always show controls and reset timer
-          if (!showControlsRef.current) {
-            showAndScheduleHideRef.current();
-          } else {
-            scheduleHideRef.current();
-          }
-        } else if (eventType === "select") {
-          // OK button: if controls are hidden, show them (video keeps playing).
-          // Focus lands on Play/Pause automatically via hasTVPreferredFocus,
-          // so the next OK press will pause/resume via that button's onPress.
-          // If controls are already visible, the focused button handles the
-          // press itself — we just reset the hide timer here.
-          if (!showControlsRef.current) {
-            showAndScheduleHideRef.current();
-          } else {
-            scheduleHideRef.current();
-          }
-        } else if (eventType === "menu" || eventType === "back") {
-          if (showControlsRef.current) {
-            showControlsRef.current = false;
-            setShowControlsState(false);
-            controlsOpacity.value = withTiming(0, { duration: 200 });
-            setShowRecentPanel(false);
-          } else if (isBackgroundPlayingRef.current) {
-            // Background audio is on — ask the user whether to stop it or keep
-            // it playing before navigating away.
-            setShowStopAudioModal(true);
-          } else {
-            // Controls already hidden — treat as a navigation back
-            onBack?.();
-          }
+    // react-native-tvos uses a new object-based TVEventHandler API.
+    // Import directly from the library path — it is NOT exported from the
+    // main react-native package index.
+    let TVEventHandler: any;
+    try {
+      TVEventHandler =
+        require("react-native/Libraries/Components/TV/TVEventHandler").default;
+    } catch (_) {
+      return;
+    }
+    if (!TVEventHandler?.addListener) return;
+
+    const subscription = TVEventHandler.addListener((evt: any) => {
+      if (!evt) return;
+      const { eventType } = evt;
+
+      if (["up", "down", "left", "right", "playPause"].includes(eventType)) {
+        // Directional / play-pause keys always show controls and reset timer
+        if (!showControlsRef.current) {
+          showAndScheduleHideRef.current();
+        } else {
+          scheduleHideRef.current();
         }
-      });
-    } catch (_) {}
+      } else if (eventType === "select") {
+        // OK button: if controls are hidden, show them (video keeps playing).
+        // Focus lands on Play/Pause automatically via hasTVPreferredFocus,
+        // so the next OK press will pause/resume via that button's onPress.
+        // If controls are already visible, the focused Pressable handles the
+        // press itself — we just reset the hide timer here.
+        if (!showControlsRef.current) {
+          showAndScheduleHideRef.current();
+        } else {
+          scheduleHideRef.current();
+        }
+      } else if (eventType === "menu" || eventType === "back") {
+        if (showControlsRef.current) {
+          showControlsRef.current = false;
+          setShowControlsState(false);
+          controlsOpacity.value = withTiming(0, { duration: 200 });
+          setShowRecentPanel(false);
+        } else if (isBackgroundPlayingRef.current) {
+          // Background audio is on — ask the user whether to stop it or keep
+          // it playing before navigating away.
+          setShowStopAudioModal(true);
+        } else {
+          // Controls already hidden — treat as a navigation back
+          onBack?.();
+        }
+      }
+    });
+
     return () => {
       try {
-        handler?.disable();
+        subscription?.remove();
       } catch (_) {}
     };
     // onBack is stable from the parent; controlsOpacity is a shared value (stable ref).
