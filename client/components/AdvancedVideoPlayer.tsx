@@ -17,6 +17,7 @@ import {
   StatusBar,
   PermissionsAndroid,
   findNodeHandle,
+  DeviceEventEmitter,
 } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
@@ -44,6 +45,8 @@ import { Channel } from "@/types/playlist";
 import {
   TvPlayerView,
   TvPlayerCommands,
+  NativeAudioTrack,
+  NativeSubtitleTrack,
 } from "../../modules/tv-player/src/index";
 
 const isTV = Platform.isTV;
@@ -266,6 +269,13 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   const [selectedSubtitleTrack, setSelectedSubtitleTrack] = useState<
     string | null
   >(null);
+  // Native tracks reported by ExoPlayer via onTracksChange
+  const [nativeAudioTracks, setNativeAudioTracks] = useState<
+    NativeAudioTrack[]
+  >([]);
+  const [nativeSubtitleTracks, setNativeSubtitleTracks] = useState<
+    NativeSubtitleTrack[]
+  >([]);
   const [showRecentPanel, setShowRecentPanel] = useState(false);
 
   // Modals
@@ -276,6 +286,8 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   const [showAudioModal, setShowAudioModal] = useState(false);
   const [showSubtitleModal, setShowSubtitleModal] = useState(false);
 
+  const [isInPiP, setIsInPiP] = useState(false);
+
   // Seek flash
   const [seekFlash, setSeekFlash] = useState<{
     visible: boolean;
@@ -284,6 +296,29 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
 
   const qualities =
     detectedQualities.length > 0 ? detectedQualities : propQualities;
+  // Use native tracks from ExoPlayer when available, fall back to prop tracks
+  const audioTracks =
+    nativeAudioTracks.length > 0
+      ? nativeAudioTracks
+      : propAudioTracks.map((t, i) => ({
+          groupIndex: 0,
+          trackIndex: i,
+          id: t.id,
+          label: t.label,
+          language: t.language,
+          isSelected: false,
+        }));
+  const subtitleTracks =
+    nativeSubtitleTracks.length > 0
+      ? nativeSubtitleTracks
+      : propSubtitleTracks.map((t, i) => ({
+          groupIndex: 0,
+          trackIndex: i,
+          id: t.id,
+          label: t.label,
+          language: t.language,
+          isSelected: false,
+        }));
 
   // ── Animations ────────────────────────────────────────────────────────────
   const controlsOpacity = useSharedValue(0);
@@ -315,30 +350,33 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     [controlsOpacity],
   );
 
-  // Start/reset the auto-hide timer (phone only — on TV controls stay until dismissed).
-  const scheduleHide = useCallback(() => {
-    if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
-    if (isTV) return; // TV: controls stay visible, dismissed via Back/Menu
-    controlsTimerRef.current = setTimeout(() => {
-      // Don't hide while a modal is open or while paused
-      if (
-        showSettingsModal ||
-        showQualityModal ||
-        showAspectModal ||
-        showAudioModal ||
-        showSubtitleModal
-      )
-        return;
-      setShowControls(false);
-    }, CONTROLS_TIMEOUT_MS);
+  // Track whether any modal is open — used by scheduleHide to avoid
+  // hiding controls while a modal is visible.
+  const anyModalOpenRef = useRef(false);
+  useEffect(() => {
+    anyModalOpenRef.current =
+      showSettingsModal ||
+      showQualityModal ||
+      showAspectModal ||
+      showAudioModal ||
+      showSubtitleModal;
   }, [
     showSettingsModal,
     showQualityModal,
     showAspectModal,
     showAudioModal,
     showSubtitleModal,
-    setShowControls,
   ]);
+
+  // Start/reset the auto-hide timer for both TV and phone.
+  const scheduleHide = useCallback(() => {
+    if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
+    controlsTimerRef.current = setTimeout(() => {
+      // Don't hide while a modal is open
+      if (anyModalOpenRef.current) return;
+      setShowControls(false);
+    }, CONTROLS_TIMEOUT_MS);
+  }, [setShowControls]);
 
   const showAndScheduleHide = useCallback(() => {
     setShowControls(true);
@@ -436,6 +474,22 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     };
   }, []);
 
+  // Listen for PiP mode changes from MainActivity
+  useEffect(() => {
+    if (isTV) return;
+    const sub = DeviceEventEmitter.addListener(
+      "onPipModeChanged",
+      (e: { isInPiP: boolean }) => {
+        setIsInPiP(e.isInPiP);
+        if (e.isInPiP) {
+          // Hide controls immediately when entering PiP
+          setShowControls(false);
+        }
+      },
+    );
+    return () => sub.remove();
+  }, [setShowControls]);
+
   // ── TV D-pad handler ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!isTV) return;
@@ -457,7 +511,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
       const { eventType } = evt;
 
       if (["up", "down", "left", "right", "playPause"].includes(eventType)) {
-        // Directional / play-pause keys always show controls and reset timer
+        // Directional / play-pause keys show controls and reset the hide timer
         if (!showControlsRef.current) {
           showAndScheduleHideRef.current();
         } else {
@@ -591,10 +645,26 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
 
   // ── Gestures ──────────────────────────────────────────────────────────────
 
+  // Hide controls immediately (used by tap gesture on TV)
+  const hideControls = useCallback(() => {
+    setShowControls(false);
+  }, [setShowControls]);
+
   const tapGesture = Gesture.Tap()
     .numberOfTaps(1)
     .onEnd(() => {
-      runOnJS(showControlsRef.current ? scheduleHide : showAndScheduleHide)();
+      if (showControlsRef.current) {
+        if (isTV) {
+          // On TV: tap hides the controls (same as Back)
+          runOnJS(hideControls)();
+        } else {
+          // On phone: tap resets the auto-hide timer
+          runOnJS(scheduleHideRef.current)();
+        }
+      } else {
+        // Controls hidden: show them and start the auto-hide timer
+        runOnJS(showAndScheduleHideRef.current)();
+      }
     });
 
   const doubleTapGesture = Gesture.Tap()
@@ -660,6 +730,14 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
             onPositionChange={(e) => {
               setPositionMs(e.nativeEvent.position);
               setDurationMs(e.nativeEvent.duration);
+            }}
+            onTracksChange={(e) => {
+              setNativeAudioTracks(e.nativeEvent.audioTracks);
+              setNativeSubtitleTracks(e.nativeEvent.subtitleTracks);
+            }}
+            onPipModeChange={(e) => {
+              setIsInPiP(e.nativeEvent.isInPiP);
+              if (e.nativeEvent.isInPiP) setShowControls(false);
             }}
           />
 
@@ -764,457 +842,491 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
       </GestureDetector>
 
       {/* ── Controls overlay ────────────────────────────────────────── */}
-      {/*
-          Always rendered (so animations work) but pointer-events are "none"
-          when hidden so touches pass through to the gesture detector below.
-          On TV, all TVFocusablePressable children are only focusable when
-          showControls is true, preventing focus from landing on invisible buttons.
-        */}
-      <Animated.View
-        style={[st.controlsOverlay, animControls]}
-        pointerEvents={showControls && !isLocked ? "box-none" : "none"}
-      >
-        {/* ── Top bar ─────────────────────────────────────────────── */}
-        <View
-          style={[
-            st.topBar,
-            {
-              paddingTop: insets.top + Spacing.sm,
-              paddingLeft: insets.left + Spacing.md,
-              paddingRight: insets.right + Spacing.md,
-            },
-          ]}
+      {/* Not rendered in PiP mode — the tiny PiP window must show pure video. */}
+      {!isInPiP ? (
+        <Animated.View
+          style={[st.controlsOverlay, animControls]}
+          pointerEvents={showControls && !isLocked ? "box-none" : "none"}
         >
-          {/* Back */}
-          <View style={st.topLeft}>
-            {onBack ? (
-              <TVFocusablePressable
-                onPress={onBack}
-                baseStyle={st.iconBtn}
-                focusedStyle={st.iconBtnFocused}
-                focusable={showControls}
-                hitSlop={16}
-                accessibilityLabel="Back"
-                viewRef={backBtnRef}
-                nextFocusDown={nh.playPause}
-              >
-                <Ionicons
-                  name="chevron-back"
-                  size={playerControls.icon + 4}
-                  color="#fff"
-                />
-              </TVFocusablePressable>
-            ) : null}
-          </View>
-
-          {/* Title */}
-          <View style={st.topCenter}>
-            {title ? (
-              <ThemedText
-                type={isUltraWide ? "body" : "h4"}
-                style={st.titleText}
-                numberOfLines={1}
-              >
-                {title}
-              </ThemedText>
-            ) : null}
-            {subtitle ? (
-              <ThemedText
-                type="small"
-                style={st.subtitleText}
-                numberOfLines={1}
-              >
-                {subtitle}
-              </ThemedText>
-            ) : null}
-          </View>
-
-          {/* Top-right actions */}
-          <View style={st.topRight}>
-            {/* Recent channels */}
-            {recentChannels.length > 0 ? (
-              <TVFocusablePressable
-                onPress={() => setShowRecentPanel((p) => !p)}
-                baseStyle={st.iconBtn}
-                focusedStyle={st.iconBtnFocused}
-                focusable={showControls}
-                accessibilityLabel="Recent channels"
-              >
-                <Ionicons name="list" size={playerControls.icon} color="#fff" />
-              </TVFocusablePressable>
-            ) : null}
-
-            {/* Favourite */}
-            {onFavoritePress ? (
-              <TVFocusablePressable
-                onPress={onFavoritePress}
-                baseStyle={[st.iconBtn, isFavorite && st.iconBtnActive]}
-                focusedStyle={st.iconBtnFocused}
-                focusable={showControls}
-                accessibilityLabel={
-                  isFavorite ? "Remove favourite" : "Add favourite"
-                }
-              >
-                <Ionicons
-                  name={isFavorite ? "heart" : "heart-outline"}
-                  size={playerControls.icon}
-                  color={isFavorite ? Colors.dark.primary : "#fff"}
-                />
-              </TVFocusablePressable>
-            ) : null}
-
-            {/* Lock */}
-            {!isTV ? (
-              <TVFocusablePressable
-                onPress={() => setIsLocked(true)}
-                baseStyle={st.iconBtn}
-                focusedStyle={st.iconBtnFocused}
-                focusable={showControls}
-                accessibilityLabel="Lock controls"
-              >
-                <Ionicons
-                  name="lock-open-outline"
-                  size={playerControls.icon}
-                  color="#fff"
-                />
-              </TVFocusablePressable>
-            ) : null}
-          </View>
-        </View>
-
-        {/* ── Center transport ─────────────────────────────────────── */}
-        <View style={st.centerRow}>
-          {/* Previous / seek-back */}
-          {onPrevious ? (
-            <TVFocusablePressable
-              onPress={() => navigateToChannel(onPrevious)}
-              baseStyle={[
-                st.navBtn,
-                {
-                  width: playerControls.nav,
-                  height: playerControls.nav,
-                  borderRadius: playerControls.nav / 2,
-                },
-              ]}
-              focusedStyle={st.navBtnFocused}
-              focusable={showControls}
-              hitSlop={12}
-              accessibilityLabel="Previous"
-            >
-              <Ionicons
-                name="play-skip-back"
-                size={playerControls.icon * 1.2}
-                color="#fff"
-              />
-            </TVFocusablePressable>
-          ) : !isLive ? (
-            <TVFocusablePressable
-              onPress={() => handleSeek(-SEEK_MS)}
-              baseStyle={[
-                st.navBtn,
-                {
-                  width: playerControls.nav,
-                  height: playerControls.nav,
-                  borderRadius: playerControls.nav / 2,
-                },
-              ]}
-              focusedStyle={st.navBtnFocused}
-              focusable={showControls}
-              hitSlop={12}
-              accessibilityLabel="Seek back 10s"
-            >
-              <Ionicons
-                name="play-back"
-                size={playerControls.icon * 1.2}
-                color="#fff"
-              />
-            </TVFocusablePressable>
-          ) : (
-            <View
-              style={{ width: playerControls.nav, height: playerControls.nav }}
-            />
-          )}
-
-          {/* Play / Pause — always preferred focus on TV when controls are visible */}
-          <TVFocusablePressable
-            onPress={handlePlayPause}
-            baseStyle={[
-              st.playBtn,
+          {/* ── Top bar ─────────────────────────────────────────────── */}
+          <View
+            style={[
+              st.topBar,
               {
-                width: playerControls.play,
-                height: playerControls.play,
-                borderRadius: playerControls.play / 2,
+                paddingTop: insets.top + Spacing.sm,
+                paddingLeft: insets.left + Spacing.md,
+                paddingRight: insets.right + Spacing.md,
               },
             ]}
-            focusedStyle={st.playBtnFocused}
-            focusable={showControls}
-            hasTVPreferredFocus={isTV && showControls}
-            accessibilityLabel={isPlaying ? "Pause" : "Play"}
-            viewRef={playPauseBtnRef}
-            nextFocusUp={nh.backBtn}
-            nextFocusDown={nh.seekBar ?? nh.firstTool}
           >
-            <Ionicons
-              name={isPlaying ? "pause" : "play"}
-              size={playerControls.icon * 1.8}
-              color="#fff"
-            />
-          </TVFocusablePressable>
-
-          {/* Next / seek-forward */}
-          {onNext ? (
-            <TVFocusablePressable
-              onPress={() => navigateToChannel(onNext)}
-              baseStyle={[
-                st.navBtn,
-                {
-                  width: playerControls.nav,
-                  height: playerControls.nav,
-                  borderRadius: playerControls.nav / 2,
-                },
-              ]}
-              focusedStyle={st.navBtnFocused}
-              focusable={showControls}
-              hitSlop={12}
-              accessibilityLabel="Next"
-            >
-              <Ionicons
-                name="play-skip-forward"
-                size={playerControls.icon * 1.2}
-                color="#fff"
-              />
-            </TVFocusablePressable>
-          ) : !isLive ? (
-            <TVFocusablePressable
-              onPress={() => handleSeek(SEEK_MS)}
-              baseStyle={[
-                st.navBtn,
-                {
-                  width: playerControls.nav,
-                  height: playerControls.nav,
-                  borderRadius: playerControls.nav / 2,
-                },
-              ]}
-              focusedStyle={st.navBtnFocused}
-              focusable={showControls}
-              hitSlop={12}
-              accessibilityLabel="Seek forward 10s"
-            >
-              <Ionicons
-                name="play-forward"
-                size={playerControls.icon * 1.2}
-                color="#fff"
-              />
-            </TVFocusablePressable>
-          ) : (
-            <View
-              style={{ width: playerControls.nav, height: playerControls.nav }}
-            />
-          )}
-        </View>
-
-        {/* ── Bottom bar ───────────────────────────────────────────── */}
-        <View
-          style={[
-            st.bottomBar,
-            {
-              paddingBottom: insets.bottom + Spacing.md,
-              paddingLeft: insets.left + Spacing.md,
-              paddingRight: insets.right + Spacing.md,
-            },
-          ]}
-        >
-          {/* Progress row — VOD only */}
-          {!isLive ? (
-            <View style={st.progressRow}>
-              <ThemedText type="caption" style={st.timeText}>
-                {formatTime(positionMs)}
-              </ThemedText>
-              <Pressable
-                ref={seekBarRef}
-                style={[st.seekBar, seekBarFocused && st.seekBarFocused]}
-                focusable={showControls}
-                onFocus={() => setSeekBarFocused(true)}
-                onBlur={() => setSeekBarFocused(false)}
-                nextFocusUp={nh.playPause ?? undefined}
-                nextFocusDown={nh.firstTool ?? undefined}
-                onPress={(e) => {
-                  const barWidth =
-                    width -
-                    insets.left -
-                    insets.right -
-                    Spacing.md * 2 -
-                    48 * 2;
-                  handleSeekToPercent(
-                    Math.min(
-                      1,
-                      Math.max(0, e.nativeEvent.locationX / barWidth),
-                    ),
-                  );
-                }}
-              >
-                <View
-                  style={[
-                    st.seekBarTrack,
-                    seekBarFocused && st.seekBarTrackFocused,
-                  ]}
-                >
-                  <View
-                    style={[st.seekBarFill, { width: `${progress * 100}%` }]}
-                  />
-                  <View
-                    style={[
-                      st.seekThumb,
-                      { left: `${progress * 100}%` },
-                      seekBarFocused && st.seekThumbFocused,
-                    ]}
-                  />
-                </View>
-              </Pressable>
-              <ThemedText type="caption" style={st.timeText}>
-                {formatTime(durationMs)}
-              </ThemedText>
-            </View>
-          ) : null}
-
-          {/* Bottom controls row */}
-          <View style={st.bottomRow}>
-            {/* Left badges */}
-            <View style={st.badgeRow}>
-              {isLive ? (
-                <View style={st.liveBadge}>
-                  <View style={st.liveDot} />
-                  <ThemedText type="small" style={st.liveText}>
-                    LIVE
-                  </ThemedText>
-                </View>
-              ) : null}
-              {drm ? (
-                <View style={st.drmBadge}>
-                  <Ionicons
-                    name="shield-checkmark"
-                    size={12}
-                    color={Colors.dark.success}
-                  />
-                  <ThemedText
-                    type="caption"
-                    style={{ color: "#fff", marginLeft: 4 }}
-                  >
-                    DRM
-                  </ThemedText>
-                </View>
-              ) : null}
-            </View>
-
-            {/* Right tool buttons */}
-            <View style={st.bottomRight}>
-              {/* Background audio */}
-              <TVFocusablePressable
-                onPress={handleBackgroundToggle}
-                baseStyle={[
-                  st.toolBtn,
-                  isBackgroundPlaying && st.toolBtnActive,
-                ]}
-                focusedStyle={st.toolBtnFocused}
-                focusable={showControls}
-                accessibilityLabel={
-                  isBackgroundPlaying
-                    ? "Disable background audio"
-                    : "Enable background audio"
-                }
-                viewRef={firstToolBtnRef}
-                nextFocusUp={nh.seekBar ?? nh.playPause}
-              >
-                <Ionicons
-                  name={
-                    isBackgroundPlaying
-                      ? "musical-notes"
-                      : "musical-notes-outline"
-                  }
-                  size={20}
-                  color={isBackgroundPlaying ? Colors.dark.primary : "#fff"}
-                />
-              </TVFocusablePressable>
-
-              {/* Aspect ratio */}
-              <TVFocusablePressable
-                onPress={() => setShowAspectModal(true)}
-                baseStyle={st.toolBtn}
-                focusedStyle={st.toolBtnFocused}
-                focusable={showControls}
-                accessibilityLabel="Aspect ratio"
-              >
-                <Ionicons name="scan-outline" size={20} color="#fff" />
-              </TVFocusablePressable>
-
-              {/* Subtitles */}
-              {propSubtitleTracks.length > 0 ? (
+            {/* Back */}
+            <View style={st.topLeft}>
+              {onBack ? (
                 <TVFocusablePressable
-                  onPress={() => setShowSubtitleModal(true)}
-                  baseStyle={[
-                    st.toolBtn,
-                    selectedSubtitleTrack !== null && st.toolBtnActive,
-                  ]}
-                  focusedStyle={st.toolBtnFocused}
+                  onPress={onBack}
+                  baseStyle={st.iconBtn}
+                  focusedStyle={st.iconBtnFocused}
                   focusable={showControls}
-                  accessibilityLabel="Subtitles"
+                  hitSlop={16}
+                  accessibilityLabel="Back"
+                  viewRef={backBtnRef}
+                  nextFocusDown={nh.playPause}
                 >
                   <Ionicons
-                    name="text"
-                    size={20}
-                    color={
-                      selectedSubtitleTrack !== null
-                        ? Colors.dark.primary
-                        : "#fff"
-                    }
+                    name="chevron-back"
+                    size={playerControls.icon + 4}
+                    color="#fff"
                   />
                 </TVFocusablePressable>
               ) : null}
+            </View>
 
-              {/* Audio */}
-              {propAudioTracks.length > 0 ? (
+            {/* Title */}
+            <View style={st.topCenter}>
+              {title ? (
+                <ThemedText
+                  type={isUltraWide ? "body" : "h4"}
+                  style={st.titleText}
+                  numberOfLines={1}
+                >
+                  {title}
+                </ThemedText>
+              ) : null}
+              {subtitle ? (
+                <ThemedText
+                  type="small"
+                  style={st.subtitleText}
+                  numberOfLines={1}
+                >
+                  {subtitle}
+                </ThemedText>
+              ) : null}
+            </View>
+
+            {/* Top-right actions */}
+            <View style={st.topRight}>
+              {/* Recent channels */}
+              {recentChannels.length > 0 ? (
                 <TVFocusablePressable
-                  onPress={() => setShowAudioModal(true)}
-                  baseStyle={st.toolBtn}
-                  focusedStyle={st.toolBtnFocused}
+                  onPress={() => setShowRecentPanel((p) => !p)}
+                  baseStyle={st.iconBtn}
+                  focusedStyle={st.iconBtnFocused}
                   focusable={showControls}
-                  accessibilityLabel="Audio track"
+                  accessibilityLabel="Recent channels"
                 >
                   <Ionicons
-                    name="volume-medium-outline"
-                    size={20}
+                    name="list"
+                    size={playerControls.icon}
                     color="#fff"
                   />
                 </TVFocusablePressable>
               ) : null}
 
-              {/* Quality */}
-              {qualities.length > 0 ? (
+              {/* Favourite */}
+              {onFavoritePress ? (
                 <TVFocusablePressable
-                  onPress={() => setShowQualityModal(true)}
-                  baseStyle={st.toolBtn}
-                  focusedStyle={st.toolBtnFocused}
+                  onPress={onFavoritePress}
+                  baseStyle={[st.iconBtn, isFavorite && st.iconBtnActive]}
+                  focusedStyle={st.iconBtnFocused}
                   focusable={showControls}
-                  accessibilityLabel="Quality"
+                  accessibilityLabel={
+                    isFavorite ? "Remove favourite" : "Add favourite"
+                  }
                 >
-                  <Ionicons name="layers-outline" size={20} color="#fff" />
+                  <Ionicons
+                    name={isFavorite ? "heart" : "heart-outline"}
+                    size={playerControls.icon}
+                    color={isFavorite ? Colors.dark.primary : "#fff"}
+                  />
                 </TVFocusablePressable>
               ) : null}
 
-              {/* Settings */}
-              <TVFocusablePressable
-                onPress={() => setShowSettingsModal(true)}
-                baseStyle={st.toolBtn}
-                focusedStyle={st.toolBtnFocused}
-                focusable={showControls}
-                accessibilityLabel="Settings"
-              >
-                <Ionicons name="settings-outline" size={20} color="#fff" />
-              </TVFocusablePressable>
+              {/* PiP — mobile only */}
+              {!isTV && Platform.OS === "android" ? (
+                <TVFocusablePressable
+                  onPress={() => TvPlayerCommands.enterPip(tvPlayerRef)}
+                  baseStyle={st.iconBtn}
+                  focusedStyle={st.iconBtnFocused}
+                  focusable={showControls}
+                  accessibilityLabel="Picture in picture"
+                >
+                  <Ionicons
+                    name="browsers-outline"
+                    size={playerControls.icon}
+                    color="#fff"
+                  />
+                </TVFocusablePressable>
+              ) : null}
+
+              {/* Lock */}
+              {!isTV ? (
+                <TVFocusablePressable
+                  onPress={() => setIsLocked(true)}
+                  baseStyle={st.iconBtn}
+                  focusedStyle={st.iconBtnFocused}
+                  focusable={showControls}
+                  accessibilityLabel="Lock controls"
+                >
+                  <Ionicons
+                    name="lock-open-outline"
+                    size={playerControls.icon}
+                    color="#fff"
+                  />
+                </TVFocusablePressable>
+              ) : null}
             </View>
           </View>
-        </View>
-      </Animated.View>
+
+          {/* ── Center transport ─────────────────────────────────────── */}
+          <View style={st.centerRow}>
+            {/* Previous / seek-back */}
+            {onPrevious ? (
+              <TVFocusablePressable
+                onPress={() => navigateToChannel(onPrevious)}
+                baseStyle={[
+                  st.navBtn,
+                  {
+                    width: playerControls.nav,
+                    height: playerControls.nav,
+                    borderRadius: playerControls.nav / 2,
+                  },
+                ]}
+                focusedStyle={st.navBtnFocused}
+                focusable={showControls}
+                hitSlop={12}
+                accessibilityLabel="Previous"
+              >
+                <Ionicons
+                  name="play-skip-back"
+                  size={playerControls.icon * 1.2}
+                  color="#fff"
+                />
+              </TVFocusablePressable>
+            ) : !isLive ? (
+              <TVFocusablePressable
+                onPress={() => handleSeek(-SEEK_MS)}
+                baseStyle={[
+                  st.navBtn,
+                  {
+                    width: playerControls.nav,
+                    height: playerControls.nav,
+                    borderRadius: playerControls.nav / 2,
+                  },
+                ]}
+                focusedStyle={st.navBtnFocused}
+                focusable={showControls}
+                hitSlop={12}
+                accessibilityLabel="Seek back 10s"
+              >
+                <Ionicons
+                  name="play-back"
+                  size={playerControls.icon * 1.2}
+                  color="#fff"
+                />
+              </TVFocusablePressable>
+            ) : (
+              <View
+                style={{
+                  width: playerControls.nav,
+                  height: playerControls.nav,
+                }}
+              />
+            )}
+
+            {/* Play / Pause — always preferred focus on TV when controls are visible */}
+            <TVFocusablePressable
+              onPress={handlePlayPause}
+              baseStyle={[
+                st.playBtn,
+                {
+                  width: playerControls.play,
+                  height: playerControls.play,
+                  borderRadius: playerControls.play / 2,
+                },
+              ]}
+              focusedStyle={st.playBtnFocused}
+              focusable={showControls}
+              hasTVPreferredFocus={isTV && showControls}
+              accessibilityLabel={isPlaying ? "Pause" : "Play"}
+              viewRef={playPauseBtnRef}
+              nextFocusUp={nh.backBtn}
+              nextFocusDown={nh.seekBar ?? nh.firstTool}
+            >
+              <Ionicons
+                name={isPlaying ? "pause" : "play"}
+                size={playerControls.icon * 1.8}
+                color="#fff"
+              />
+            </TVFocusablePressable>
+
+            {/* Next / seek-forward */}
+            {onNext ? (
+              <TVFocusablePressable
+                onPress={() => navigateToChannel(onNext)}
+                baseStyle={[
+                  st.navBtn,
+                  {
+                    width: playerControls.nav,
+                    height: playerControls.nav,
+                    borderRadius: playerControls.nav / 2,
+                  },
+                ]}
+                focusedStyle={st.navBtnFocused}
+                focusable={showControls}
+                hitSlop={12}
+                accessibilityLabel="Next"
+              >
+                <Ionicons
+                  name="play-skip-forward"
+                  size={playerControls.icon * 1.2}
+                  color="#fff"
+                />
+              </TVFocusablePressable>
+            ) : !isLive ? (
+              <TVFocusablePressable
+                onPress={() => handleSeek(SEEK_MS)}
+                baseStyle={[
+                  st.navBtn,
+                  {
+                    width: playerControls.nav,
+                    height: playerControls.nav,
+                    borderRadius: playerControls.nav / 2,
+                  },
+                ]}
+                focusedStyle={st.navBtnFocused}
+                focusable={showControls}
+                hitSlop={12}
+                accessibilityLabel="Seek forward 10s"
+              >
+                <Ionicons
+                  name="play-forward"
+                  size={playerControls.icon * 1.2}
+                  color="#fff"
+                />
+              </TVFocusablePressable>
+            ) : (
+              <View
+                style={{
+                  width: playerControls.nav,
+                  height: playerControls.nav,
+                }}
+              />
+            )}
+          </View>
+
+          {/* ── Bottom bar ───────────────────────────────────────────── */}
+          <View
+            style={[
+              st.bottomBar,
+              {
+                paddingBottom: insets.bottom + Spacing.md,
+                paddingLeft: insets.left + Spacing.md,
+                paddingRight: insets.right + Spacing.md,
+              },
+            ]}
+          >
+            {/* Progress row — always shown.
+               LIVE: shows elapsed time + LIVE badge, no seek bar.
+               VOD:  shows position / duration with a tappable seek bar. */}
+            <View style={st.progressRow}>
+              <ThemedText type="caption" style={st.timeText}>
+                {formatTime(positionMs)}
+              </ThemedText>
+              {isLive ? (
+                /* Live streams: non-interactive progress indicator */
+                <View style={st.seekBar} pointerEvents="none">
+                  <View style={st.seekBarTrack}>
+                    <View style={[st.seekBarFill, { width: "100%" }]} />
+                  </View>
+                </View>
+              ) : (
+                /* VOD: tappable seek bar */
+                <Pressable
+                  ref={seekBarRef}
+                  style={[st.seekBar, seekBarFocused && st.seekBarFocused]}
+                  focusable={showControls}
+                  onFocus={() => setSeekBarFocused(true)}
+                  onBlur={() => setSeekBarFocused(false)}
+                  nextFocusUp={nh.playPause ?? undefined}
+                  nextFocusDown={nh.firstTool ?? undefined}
+                  onPress={(e) => {
+                    const barWidth =
+                      width -
+                      insets.left -
+                      insets.right -
+                      Spacing.md * 2 -
+                      48 * 2;
+                    handleSeekToPercent(
+                      Math.min(
+                        1,
+                        Math.max(0, e.nativeEvent.locationX / barWidth),
+                      ),
+                    );
+                  }}
+                >
+                  <View
+                    style={[
+                      st.seekBarTrack,
+                      seekBarFocused && st.seekBarTrackFocused,
+                    ]}
+                  >
+                    <View
+                      style={[st.seekBarFill, { width: `${progress * 100}%` }]}
+                    />
+                    <View
+                      style={[
+                        st.seekThumb,
+                        { left: `${progress * 100}%` },
+                        seekBarFocused && st.seekThumbFocused,
+                      ]}
+                    />
+                  </View>
+                </Pressable>
+              )}
+              <ThemedText type="caption" style={st.timeText}>
+                {isLive ? "LIVE" : formatTime(durationMs)}
+              </ThemedText>
+            </View>
+
+            {/* Bottom controls row */}
+            <View style={st.bottomRow}>
+              {/* Left badges */}
+              <View style={st.badgeRow}>
+                {isLive ? (
+                  <View style={st.liveBadge}>
+                    <View style={st.liveDot} />
+                    <ThemedText type="small" style={st.liveText}>
+                      LIVE
+                    </ThemedText>
+                  </View>
+                ) : null}
+                {drm ? (
+                  <View style={st.drmBadge}>
+                    <Ionicons
+                      name="shield-checkmark"
+                      size={12}
+                      color={Colors.dark.success}
+                    />
+                    <ThemedText
+                      type="caption"
+                      style={{ color: "#fff", marginLeft: 4 }}
+                    >
+                      DRM
+                    </ThemedText>
+                  </View>
+                ) : null}
+              </View>
+
+              {/* Right tool buttons */}
+              <View style={st.bottomRight}>
+                {/* Background audio */}
+                <TVFocusablePressable
+                  onPress={handleBackgroundToggle}
+                  baseStyle={[
+                    st.toolBtn,
+                    isBackgroundPlaying && st.toolBtnActive,
+                  ]}
+                  focusedStyle={st.toolBtnFocused}
+                  focusable={showControls}
+                  accessibilityLabel={
+                    isBackgroundPlaying
+                      ? "Disable background audio"
+                      : "Enable background audio"
+                  }
+                  viewRef={firstToolBtnRef}
+                  nextFocusUp={nh.seekBar ?? nh.playPause}
+                >
+                  <Ionicons
+                    name={
+                      isBackgroundPlaying
+                        ? "musical-notes"
+                        : "musical-notes-outline"
+                    }
+                    size={20}
+                    color={isBackgroundPlaying ? Colors.dark.primary : "#fff"}
+                  />
+                </TVFocusablePressable>
+
+                {/* Aspect ratio */}
+                <TVFocusablePressable
+                  onPress={() => setShowAspectModal(true)}
+                  baseStyle={st.toolBtn}
+                  focusedStyle={st.toolBtnFocused}
+                  focusable={showControls}
+                  accessibilityLabel="Aspect ratio"
+                >
+                  <Ionicons name="scan-outline" size={20} color="#fff" />
+                </TVFocusablePressable>
+
+                {/* Subtitles */}
+                {subtitleTracks.length > 0 ? (
+                  <TVFocusablePressable
+                    onPress={() => setShowSubtitleModal(true)}
+                    baseStyle={[
+                      st.toolBtn,
+                      selectedSubtitleTrack !== null && st.toolBtnActive,
+                    ]}
+                    focusedStyle={st.toolBtnFocused}
+                    focusable={showControls}
+                    accessibilityLabel="Subtitles"
+                  >
+                    <Ionicons
+                      name="text"
+                      size={20}
+                      color={
+                        selectedSubtitleTrack !== null
+                          ? Colors.dark.primary
+                          : "#fff"
+                      }
+                    />
+                  </TVFocusablePressable>
+                ) : null}
+
+                {/* Audio */}
+                {audioTracks.length > 0 ? (
+                  <TVFocusablePressable
+                    onPress={() => setShowAudioModal(true)}
+                    baseStyle={st.toolBtn}
+                    focusedStyle={st.toolBtnFocused}
+                    focusable={showControls}
+                    accessibilityLabel="Audio track"
+                  >
+                    <Ionicons
+                      name="volume-medium-outline"
+                      size={20}
+                      color="#fff"
+                    />
+                  </TVFocusablePressable>
+                ) : null}
+
+                {/* Quality */}
+                {qualities.length > 0 ? (
+                  <TVFocusablePressable
+                    onPress={() => setShowQualityModal(true)}
+                    baseStyle={st.toolBtn}
+                    focusedStyle={st.toolBtnFocused}
+                    focusable={showControls}
+                    accessibilityLabel="Quality"
+                  >
+                    <Ionicons name="layers-outline" size={20} color="#fff" />
+                  </TVFocusablePressable>
+                ) : null}
+
+                {/* Settings */}
+                <TVFocusablePressable
+                  onPress={() => setShowSettingsModal(true)}
+                  baseStyle={st.toolBtn}
+                  focusedStyle={st.toolBtnFocused}
+                  focusable={showControls}
+                  accessibilityLabel="Settings"
+                >
+                  <Ionicons name="settings-outline" size={20} color="#fff" />
+                </TVFocusablePressable>
+              </View>
+            </View>
+          </View>
+        </Animated.View>
+      ) : null}
 
       {/* ── Recent channels slide-panel ──────────────────────────── */}
       <Animated.View
@@ -1372,6 +1484,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         <Pressable
           style={st.modalScrim}
           onPress={() => setShowSettingsModal(false)}
+          focusable={!isTV}
         >
           <View style={st.modalSheet}>
             <ThemedText type="h4" style={st.modalTitle}>
@@ -1400,7 +1513,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
               {
                 label: "Audio track",
                 value: selectedAudioTrack
-                  ? (propAudioTracks.find((t) => t.id === selectedAudioTrack)
+                  ? (audioTracks.find((t) => t.id === selectedAudioTrack)
                       ?.label ?? "Custom")
                   : "Default",
                 icon: "volume-medium-outline" as const,
@@ -1408,13 +1521,13 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                   setShowSettingsModal(false);
                   setShowAudioModal(true);
                 },
-                hidden: propAudioTracks.length === 0,
+                hidden: audioTracks.length === 0,
               },
               {
                 label: "Subtitles",
                 value:
                   selectedSubtitleTrack !== null
-                    ? (propSubtitleTracks.find(
+                    ? (subtitleTracks.find(
                         (t) => t.id === selectedSubtitleTrack,
                       )?.label ?? "On")
                     : "Off",
@@ -1423,7 +1536,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                   setShowSettingsModal(false);
                   setShowSubtitleModal(true);
                 },
-                hidden: propSubtitleTracks.length === 0,
+                hidden: subtitleTracks.length === 0,
               },
             ]
               .filter((item) => !item.hidden)
@@ -1472,57 +1585,30 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         <Pressable
           style={st.modalScrim}
           onPress={() => setShowQualityModal(false)}
+          focusable={!isTV}
         >
           <View style={st.modalSheet}>
             <ThemedText type="h4" style={st.modalTitle}>
               Quality
             </ThemedText>
-            <TVFocusablePressable
-              onPress={() => handleQualitySelect("auto")}
-              baseStyle={[
-                st.optionRow,
-                selectedQuality === "auto" && st.optionRowActive,
-              ]}
-              focusedStyle={st.optionRowFocused}
-              hasTVPreferredFocus={isTV}
+            <ScrollView
+              style={st.modalScrollArea}
+              showsVerticalScrollIndicator={true}
+              bounces={false}
             >
-              <ThemedText type="body" style={{ color: "#fff", flex: 1 }}>
-                Auto
-              </ThemedText>
-              {selectedQuality === "auto" ? (
-                <Ionicons
-                  name="checkmark"
-                  size={20}
-                  color={Colors.dark.primary}
-                />
-              ) : null}
-            </TVFocusablePressable>
-            {qualities.map((q) => (
               <TVFocusablePressable
-                key={q.label}
-                onPress={() => handleQualitySelect(q)}
+                onPress={() => handleQualitySelect("auto")}
                 baseStyle={[
                   st.optionRow,
-                  selectedQuality === q.label && st.optionRowActive,
+                  selectedQuality === "auto" && st.optionRowActive,
                 ]}
                 focusedStyle={st.optionRowFocused}
+                hasTVPreferredFocus={isTV && selectedQuality === "auto"}
               >
-                <View style={{ flex: 1 }}>
-                  <ThemedText type="body" style={{ color: "#fff" }}>
-                    {q.label}
-                  </ThemedText>
-                  {q.bitrate ? (
-                    <ThemedText
-                      type="caption"
-                      style={{ color: Colors.dark.textSecondary }}
-                    >
-                      {q.bitrate >= 1_000_000
-                        ? `${(q.bitrate / 1_000_000).toFixed(1)} Mbps`
-                        : `${Math.round(q.bitrate / 1000)} kbps`}
-                    </ThemedText>
-                  ) : null}
-                </View>
-                {selectedQuality === q.label ? (
+                <ThemedText type="body" style={{ color: "#fff", flex: 1 }}>
+                  Auto
+                </ThemedText>
+                {selectedQuality === "auto" ? (
                   <Ionicons
                     name="checkmark"
                     size={20}
@@ -1530,7 +1616,42 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                   />
                 ) : null}
               </TVFocusablePressable>
-            ))}
+              {qualities.map((q) => (
+                <TVFocusablePressable
+                  key={q.label}
+                  onPress={() => handleQualitySelect(q)}
+                  baseStyle={[
+                    st.optionRow,
+                    selectedQuality === q.label && st.optionRowActive,
+                  ]}
+                  focusedStyle={st.optionRowFocused}
+                  hasTVPreferredFocus={isTV && selectedQuality === q.label}
+                >
+                  <View style={{ flex: 1 }}>
+                    <ThemedText type="body" style={{ color: "#fff" }}>
+                      {q.label}
+                    </ThemedText>
+                    {q.bitrate ? (
+                      <ThemedText
+                        type="caption"
+                        style={{ color: Colors.dark.textSecondary }}
+                      >
+                        {q.bitrate >= 1_000_000
+                          ? `${(q.bitrate / 1_000_000).toFixed(1)} Mbps`
+                          : `${Math.round(q.bitrate / 1000)} kbps`}
+                      </ThemedText>
+                    ) : null}
+                  </View>
+                  {selectedQuality === q.label ? (
+                    <Ionicons
+                      name="checkmark"
+                      size={20}
+                      color={Colors.dark.primary}
+                    />
+                  ) : null}
+                </TVFocusablePressable>
+              ))}
+            </ScrollView>
           </View>
         </Pressable>
       </Modal>
@@ -1545,6 +1666,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         <Pressable
           style={st.modalScrim}
           onPress={() => setShowAspectModal(false)}
+          focusable={!isTV}
         >
           <View style={st.modalSheet}>
             <ThemedText type="h4" style={st.modalTitle}>
@@ -1563,7 +1685,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                   contentFit === opt.value && st.optionRowActive,
                 ]}
                 focusedStyle={st.optionRowFocused}
-                hasTVPreferredFocus={isTV && idx === 0}
+                hasTVPreferredFocus={isTV && contentFit === opt.value}
               >
                 <Ionicons
                   name={opt.icon as any}
@@ -1597,12 +1719,13 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         <Pressable
           style={st.modalScrim}
           onPress={() => setShowAudioModal(false)}
+          focusable={!isTV}
         >
           <View style={st.modalSheet}>
             <ThemedText type="h4" style={st.modalTitle}>
               Audio Track
             </ThemedText>
-            {propAudioTracks.length === 0 ? (
+            {audioTracks.length === 0 ? (
               <View style={st.emptyState}>
                 <Ionicons
                   name="volume-mute-outline"
@@ -1620,40 +1743,59 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 </ThemedText>
               </View>
             ) : (
-              propAudioTracks.map((track, idx) => (
-                <TVFocusablePressable
-                  key={track.id}
-                  onPress={() => {
-                    setSelectedAudioTrack(track.id);
-                    setShowAudioModal(false);
-                  }}
-                  baseStyle={[
-                    st.optionRow,
-                    selectedAudioTrack === track.id && st.optionRowActive,
-                  ]}
-                  focusedStyle={st.optionRowFocused}
-                  hasTVPreferredFocus={isTV && idx === 0}
-                >
-                  <View style={{ flex: 1 }}>
-                    <ThemedText type="body" style={{ color: "#fff" }}>
-                      {track.label}
-                    </ThemedText>
-                    <ThemedText
-                      type="caption"
-                      style={{ color: Colors.dark.textSecondary }}
-                    >
-                      {track.language}
-                    </ThemedText>
-                  </View>
-                  {selectedAudioTrack === track.id ? (
-                    <Ionicons
-                      name="checkmark"
-                      size={20}
-                      color={Colors.dark.primary}
-                    />
-                  ) : null}
-                </TVFocusablePressable>
-              ))
+              <ScrollView
+                style={st.modalScrollArea}
+                showsVerticalScrollIndicator={true}
+                bounces={false}
+              >
+                {audioTracks.map((track) => (
+                  <TVFocusablePressable
+                    key={track.id}
+                    onPress={() => {
+                      setSelectedAudioTrack(track.id);
+                      TvPlayerCommands.selectAudioTrack(
+                        tvPlayerRef,
+                        track.groupIndex,
+                        track.trackIndex,
+                      );
+                      setShowAudioModal(false);
+                    }}
+                    baseStyle={[
+                      st.optionRow,
+                      (selectedAudioTrack === track.id || track.isSelected) &&
+                        st.optionRowActive,
+                    ]}
+                    focusedStyle={st.optionRowFocused}
+                    hasTVPreferredFocus={
+                      isTV &&
+                      (selectedAudioTrack === track.id ||
+                        (!selectedAudioTrack && track.isSelected))
+                    }
+                  >
+                    <View style={{ flex: 1 }}>
+                      <ThemedText type="body" style={{ color: "#fff" }}>
+                        {track.label}
+                      </ThemedText>
+                      {track.language ? (
+                        <ThemedText
+                          type="caption"
+                          style={{ color: Colors.dark.textSecondary }}
+                        >
+                          {track.language}
+                        </ThemedText>
+                      ) : null}
+                    </View>
+                    {selectedAudioTrack === track.id ||
+                    (!selectedAudioTrack && track.isSelected) ? (
+                      <Ionicons
+                        name="checkmark"
+                        size={20}
+                        color={Colors.dark.primary}
+                      />
+                    ) : null}
+                  </TVFocusablePressable>
+                ))}
+              </ScrollView>
             )}
           </View>
         </Pressable>
@@ -1669,59 +1811,34 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         <Pressable
           style={st.modalScrim}
           onPress={() => setShowSubtitleModal(false)}
+          focusable={!isTV}
         >
           <View style={st.modalSheet}>
             <ThemedText type="h4" style={st.modalTitle}>
               Subtitles
             </ThemedText>
-            <TVFocusablePressable
-              onPress={() => {
-                setSelectedSubtitleTrack(null);
-                setShowSubtitleModal(false);
-              }}
-              baseStyle={[
-                st.optionRow,
-                selectedSubtitleTrack === null && st.optionRowActive,
-              ]}
-              focusedStyle={st.optionRowFocused}
-              hasTVPreferredFocus={isTV}
+            <ScrollView
+              style={st.modalScrollArea}
+              showsVerticalScrollIndicator={true}
+              bounces={false}
             >
-              <ThemedText type="body" style={{ color: "#fff", flex: 1 }}>
-                Off
-              </ThemedText>
-              {selectedSubtitleTrack === null ? (
-                <Ionicons
-                  name="checkmark"
-                  size={20}
-                  color={Colors.dark.primary}
-                />
-              ) : null}
-            </TVFocusablePressable>
-            {propSubtitleTracks.map((track) => (
               <TVFocusablePressable
-                key={track.id}
                 onPress={() => {
-                  setSelectedSubtitleTrack(track.id);
+                  setSelectedSubtitleTrack(null);
+                  TvPlayerCommands.selectSubtitleTrack(tvPlayerRef, -1, 0);
                   setShowSubtitleModal(false);
                 }}
                 baseStyle={[
                   st.optionRow,
-                  selectedSubtitleTrack === track.id && st.optionRowActive,
+                  selectedSubtitleTrack === null && st.optionRowActive,
                 ]}
                 focusedStyle={st.optionRowFocused}
+                hasTVPreferredFocus={isTV && selectedSubtitleTrack === null}
               >
-                <View style={{ flex: 1 }}>
-                  <ThemedText type="body" style={{ color: "#fff" }}>
-                    {track.label}
-                  </ThemedText>
-                  <ThemedText
-                    type="caption"
-                    style={{ color: Colors.dark.textSecondary }}
-                  >
-                    {track.language}
-                  </ThemedText>
-                </View>
-                {selectedSubtitleTrack === track.id ? (
+                <ThemedText type="body" style={{ color: "#fff", flex: 1 }}>
+                  Off
+                </ThemedText>
+                {selectedSubtitleTrack === null ? (
                   <Ionicons
                     name="checkmark"
                     size={20}
@@ -1729,7 +1846,50 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                   />
                 ) : null}
               </TVFocusablePressable>
-            ))}
+              {subtitleTracks.map((track, idx) => (
+                <TVFocusablePressable
+                  key={track.id}
+                  onPress={() => {
+                    setSelectedSubtitleTrack(track.id);
+                    TvPlayerCommands.selectSubtitleTrack(
+                      tvPlayerRef,
+                      track.groupIndex,
+                      track.trackIndex,
+                    );
+                    setShowSubtitleModal(false);
+                  }}
+                  baseStyle={[
+                    st.optionRow,
+                    selectedSubtitleTrack === track.id && st.optionRowActive,
+                  ]}
+                  focusedStyle={st.optionRowFocused}
+                  hasTVPreferredFocus={
+                    isTV && selectedSubtitleTrack === track.id
+                  }
+                >
+                  <View style={{ flex: 1 }}>
+                    <ThemedText type="body" style={{ color: "#fff" }}>
+                      {track.label}
+                    </ThemedText>
+                    {track.language ? (
+                      <ThemedText
+                        type="caption"
+                        style={{ color: Colors.dark.textSecondary }}
+                      >
+                        {track.language}
+                      </ThemedText>
+                    ) : null}
+                  </View>
+                  {selectedSubtitleTrack === track.id ? (
+                    <Ionicons
+                      name="checkmark"
+                      size={20}
+                      color={Colors.dark.primary}
+                    />
+                  ) : null}
+                </TVFocusablePressable>
+              ))}
+            </ScrollView>
           </View>
         </Pressable>
       </Modal>
@@ -2138,5 +2298,8 @@ const st = StyleSheet.create({
   emptyState: {
     alignItems: "center",
     paddingVertical: Spacing.xl,
+  },
+  modalScrollArea: {
+    flexGrow: 0,
   },
 });

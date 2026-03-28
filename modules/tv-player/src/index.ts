@@ -13,6 +13,24 @@ export interface TvPlayerLoadParams {
   autoPlay?: boolean;
 }
 
+export interface NativeAudioTrack {
+  groupIndex: number;
+  trackIndex: number;
+  id: string;
+  label: string;
+  language: string;
+  isSelected: boolean;
+}
+
+export interface NativeSubtitleTrack {
+  groupIndex: number;
+  trackIndex: number;
+  id: string;
+  label: string;
+  language: string;
+  isSelected: boolean;
+}
+
 export interface TvPlayerViewProps {
   style?: ViewStyle;
   onReady?: () => void;
@@ -28,6 +46,15 @@ export interface TvPlayerViewProps {
   onPositionChange?: (event: {
     nativeEvent: { position: number; duration: number };
   }) => void;
+  /** Fires when available audio/subtitle tracks change (after load). */
+  onTracksChange?: (event: {
+    nativeEvent: {
+      audioTracks: NativeAudioTrack[];
+      subtitleTracks: NativeSubtitleTrack[];
+    };
+  }) => void;
+  /** Fires when the app enters or exits Picture-in-Picture mode. */
+  onPipModeChange?: (event: { nativeEvent: { isInPiP: boolean } }) => void;
 }
 
 // ── Native view ───────────────────────────────────────────────────────────────
@@ -92,6 +119,24 @@ export const TvPlayerCommands = {
     viewRef: React.RefObject<any>,
   ): Promise<boolean> | undefined =>
     viewRef.current?.isBackgroundAudioEnabled(),
+
+  selectAudioTrack: (
+    viewRef: React.RefObject<any>,
+    groupIndex: number,
+    trackIndex: number,
+  ): Promise<void> | undefined =>
+    viewRef.current?.selectAudioTrack(groupIndex, trackIndex),
+
+  selectSubtitleTrack: (
+    viewRef: React.RefObject<any>,
+    groupIndex: number,
+    trackIndex: number,
+  ): Promise<void> | undefined =>
+    viewRef.current?.selectSubtitleTrack(groupIndex, trackIndex),
+
+  /** Enter Picture-in-Picture mode (mobile only, no-op on TV). */
+  enterPip: (viewRef: React.RefObject<any>): Promise<void> | undefined =>
+    viewRef.current?.enterPip(),
 };
 
 // ── React component ───────────────────────────────────────────────────────────

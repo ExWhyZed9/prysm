@@ -20,6 +20,8 @@ class TvPlayerModule : Module() {
                 "onBufferingChange",
                 "onBackgroundAudioChange",
                 "onPositionChange",
+                "onTracksChange",
+                "onPipModeChange",
             )
 
             // ── Commands (imperative API, auto-added to React ref) ─────────
@@ -97,6 +99,20 @@ class TvPlayerModule : Module() {
 
             AsyncFunction("isBackgroundAudioEnabled") { view: TvPlayerView ->
                 view.isBackgroundAudioEnabled()
+            }
+
+            // ── Track selection ────────────────────────────────────────────
+
+            AsyncFunction("selectAudioTrack") { view: TvPlayerView, groupIndex: Int, trackIndex: Int ->
+                view.selectAudioTrack(groupIndex, trackIndex)
+            }
+
+            AsyncFunction("selectSubtitleTrack") { view: TvPlayerView, groupIndex: Int, trackIndex: Int ->
+                view.selectSubtitleTrack(groupIndex, trackIndex)
+            }
+
+            AsyncFunction("enterPip") { view: TvPlayerView ->
+                view.enterPip()
             }
         }
     }

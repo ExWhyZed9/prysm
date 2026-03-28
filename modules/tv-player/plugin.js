@@ -35,6 +35,22 @@ function withTvPlayer(config) {
       }
     }
 
+    // Picture-in-Picture support on the main activity
+    const activities = manifest.application?.[0]?.activity ?? [];
+    const mainActivity = activities.find(
+      (a) => a.$?.["android:name"] === ".MainActivity",
+    );
+    if (mainActivity) {
+      mainActivity.$["android:supportsPictureInPicture"] = "true";
+      // Ensure configChanges includes smallestScreenSize so the activity
+      // doesn't recreate when entering/exiting PiP
+      const existing = mainActivity.$["android:configChanges"] ?? "";
+      if (!existing.includes("smallestScreenSize")) {
+        mainActivity.$["android:configChanges"] =
+          existing + "|smallestScreenSize";
+      }
+    }
+
     // Service declaration inside <application>
     const application = manifest.application?.[0];
     if (application) {

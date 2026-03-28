@@ -8,12 +8,14 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.Rational
 import android.view.Gravity
 import android.view.Surface
 import android.view.SurfaceView
 import android.view.TextureView
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import com.prysmplayer.app.MainActivity
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -82,6 +84,10 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
     val onBufferingChange by EventDispatcher()
     val onBackgroundAudioChange by EventDispatcher()
     val onPositionChange by EventDispatcher()
+    /** Fired when the available audio/subtitle tracks change (e.g. after load). */
+    val onTracksChange by EventDispatcher()
+    /** Fired when the app enters or exits Picture-in-Picture mode. */
+    val onPipModeChange by EventDispatcher()
 
     init {
         val fillParams = FrameLayout.LayoutParams(
@@ -99,6 +105,10 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
     // ── Resize mode (called from JS contentFit prop if we add it later) ───────
     fun setResizeMode(mode: Int) {
         aspectFrame.resizeMode = mode
+        // Force a layout pass so AspectRatioFrameLayout applies the new mode
+        // immediately — without this the visual size doesn't update until the
+        // next unrelated layout event.
+        aspectFrame.requestLayout()
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -120,10 +130,61 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
     fun seekTo(positionMs: Long) { exoPlayer?.seekTo(positionMs) }
     fun setVolume(volume: Float) { exoPlayer?.volume = volume }
 
+    /**
+     * Enter Picture-in-Picture mode (mobile only — no-op on TV).
+     * Delegates to MainActivity.enterPipMode() which builds the
+     * PictureInPictureParams with the current video aspect ratio.
+     */
+    fun enterPip() {
+        if (isTV) return
+        val activity = appContext.currentActivity as? MainActivity ?: return
+        activity.enterPipMode()
+    }
+
     fun getCurrentPosition(): Long = exoPlayer?.currentPosition ?: 0L
     fun getDuration(): Long = exoPlayer?.duration?.takeIf { it != C.TIME_UNSET } ?: 0L
     fun isPlaying(): Boolean = exoPlayer?.isPlaying ?: false
     fun isBackgroundAudioEnabled(): Boolean = backgroundAudioEnabled
+
+    /**
+     * Select an audio track by its group + track index within the current tracks.
+     * [groupIndex] and [trackIndex] correspond to the values sent in onTracksChange.
+     */
+    fun selectAudioTrack(groupIndex: Int, trackIndex: Int) {
+        val player = exoPlayer ?: return
+        val tracks = player.currentTracks
+        val groups = tracks.groups.filter { it.type == androidx.media3.common.C.TRACK_TYPE_AUDIO }
+        val group = groups.getOrNull(groupIndex) ?: return
+        player.trackSelectionParameters = player.trackSelectionParameters
+            .buildUpon()
+            .setOverrideForType(
+                androidx.media3.common.TrackSelectionOverride(group.mediaTrackGroup, trackIndex)
+            )
+            .build()
+    }
+
+    /**
+     * Select a text/subtitle track by its group + track index.
+     * Pass groupIndex = -1 to disable all subtitles.
+     */
+    fun selectSubtitleTrack(groupIndex: Int, trackIndex: Int) {
+        val player = exoPlayer ?: return
+        val params = player.trackSelectionParameters.buildUpon()
+        if (groupIndex < 0) {
+            // Disable all text tracks
+            params.setIgnoredTextSelectionFlags(androidx.media3.common.C.SELECTION_FLAG_DEFAULT)
+            params.setTrackTypeDisabled(androidx.media3.common.C.TRACK_TYPE_TEXT, true)
+        } else {
+            val tracks = player.currentTracks
+            val groups = tracks.groups.filter { it.type == androidx.media3.common.C.TRACK_TYPE_TEXT }
+            val group = groups.getOrNull(groupIndex) ?: return
+            params.setTrackTypeDisabled(androidx.media3.common.C.TRACK_TYPE_TEXT, false)
+            params.setOverrideForType(
+                androidx.media3.common.TrackSelectionOverride(group.mediaTrackGroup, trackIndex)
+            )
+        }
+        player.trackSelectionParameters = params.build()
+    }
 
     /**
      * Enable background audio.
@@ -176,6 +237,7 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
     }
 
     fun releasePlayer() {
+        PipRegistry.isPlayerActive = false
         stopPoller()
         disableBackgroundAudio(silent = true)
         exoPlayer?.let {
@@ -284,6 +346,7 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
         if (autoPlay) player.playWhenReady = true
 
         exoPlayer = player
+        if (!isTV) PipRegistry.isPlayerActive = true
     }
 
     private fun attachTextureView(player: ExoPlayer, tv: TextureView) {
@@ -309,6 +372,10 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
                 val ratio = videoSize.width.toFloat() /
                         (videoSize.height * videoSize.pixelWidthHeightRatio)
                 aspectFrame.setAspectRatio(ratio)
+                // Keep PiP aspect ratio in sync with the actual video dimensions
+                if (!isTV) {
+                    PipRegistry.aspectRatio = Rational(videoSize.width, videoSize.height)
+                }
             }
         }
     }
@@ -338,6 +405,49 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
         override fun onPlayerError(error: PlaybackException) {
             stopPoller()
             onError(mapOf("message" to (error.message ?: "Unknown playback error")))
+        }
+
+        override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+            // Build audio track list
+            val audioTracks = mutableListOf<Map<String, Any>>()
+            val subtitleTracks = mutableListOf<Map<String, Any>>()
+
+            tracks.groups.forEachIndexed { groupIdx, group ->
+                when (group.type) {
+                    androidx.media3.common.C.TRACK_TYPE_AUDIO -> {
+                        for (trackIdx in 0 until group.length) {
+                            val format = group.getTrackFormat(trackIdx)
+                            audioTracks.add(mapOf(
+                                "groupIndex" to groupIdx,
+                                "trackIndex" to trackIdx,
+                                "id" to "audio_${groupIdx}_${trackIdx}",
+                                "label" to (format.label ?: format.language ?: "Track ${audioTracks.size + 1}"),
+                                "language" to (format.language ?: ""),
+                                "isSelected" to group.isTrackSelected(trackIdx),
+                            ))
+                        }
+                    }
+                    androidx.media3.common.C.TRACK_TYPE_TEXT -> {
+                        for (trackIdx in 0 until group.length) {
+                            val format = group.getTrackFormat(trackIdx)
+                            subtitleTracks.add(mapOf(
+                                "groupIndex" to groupIdx,
+                                "trackIndex" to trackIdx,
+                                "id" to "sub_${groupIdx}_${trackIdx}",
+                                "label" to (format.label ?: format.language ?: "Subtitle ${subtitleTracks.size + 1}"),
+                                "language" to (format.language ?: ""),
+                                "isSelected" to group.isTrackSelected(trackIdx),
+                            ))
+                        }
+                    }
+                    else -> {}
+                }
+            }
+
+            onTracksChange(mapOf(
+                "audioTracks" to audioTracks,
+                "subtitleTracks" to subtitleTracks,
+            ))
         }
     }
 
