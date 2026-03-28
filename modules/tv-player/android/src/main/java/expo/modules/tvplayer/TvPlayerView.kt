@@ -344,12 +344,29 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         if (backgroundAudioEnabled) {
-            // Background audio is active — only stop the position poller.
-            // The ExoPlayer instance lives on inside TvPlayerService.
+            // Background audio is active — keep the player alive but detach the
+            // video surface so the player doesn't attempt to render to a destroyed
+            // Surface, which causes crashes on some devices.
             stopPoller()
+            exoPlayer?.setVideoSurface(null)
+            exoPlayer?.setVideoSurfaceView(null)
         } else {
             // No background audio — release everything to avoid memory/battery leaks.
             releasePlayer()
+        }
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        // Re-attach the video surface when the view comes back to the foreground
+        // (e.g. user returns from launcher while background audio is playing).
+        if (backgroundAudioEnabled) {
+            val player = exoPlayer ?: return
+            when {
+                isTV && surfaceView != null -> player.setVideoSurfaceView(surfaceView)
+                textureView != null -> attachTextureView(player, textureView)
+            }
+            startPoller()
         }
     }
 }
