@@ -15,7 +15,7 @@ import android.view.SurfaceView
 import android.view.TextureView
 import android.view.ViewGroup
 import android.widget.FrameLayout
-import com.prysmplayer.app.MainActivity
+import android.app.PictureInPictureParams
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -132,13 +132,26 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
 
     /**
      * Enter Picture-in-Picture mode (mobile only — no-op on TV).
-     * Delegates to MainActivity.enterPipMode() which builds the
-     * PictureInPictureParams with the current video aspect ratio.
+     * Builds PictureInPictureParams using the current video aspect ratio
+     * from PipRegistry and enters PiP directly via the current Activity.
      */
     fun enterPip() {
         if (isTV) return
-        val activity = appContext.currentActivity as? MainActivity ?: return
-        activity.enterPipMode()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val activity = appContext.currentActivity ?: return
+        try {
+            val ratio = PipRegistry.aspectRatio
+            val params = PictureInPictureParams.Builder()
+                .setAspectRatio(Rational(ratio.numerator, ratio.denominator))
+                .apply {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        setAutoEnterEnabled(true)
+                        setSeamlessResizeEnabled(true)
+                    }
+                }
+                .build()
+            activity.enterPictureInPictureMode(params)
+        } catch (_: Exception) {}
     }
 
     fun getCurrentPosition(): Long = exoPlayer?.currentPosition ?: 0L
