@@ -1,4 +1,4 @@
-import { NativeModulesProxy, Platform } from "expo-modules-core";
+import { requireOptionalNativeModule, Platform } from "expo-modules-core";
 
 export interface FavouriteItem {
   id: string;
@@ -6,7 +6,12 @@ export interface FavouriteItem {
   logo?: string;
 }
 
-const TvChannelNative = NativeModulesProxy.TvChannel;
+const TvChannelNative =
+  Platform.OS === "android"
+    ? requireOptionalNativeModule<{
+        syncFavourites(items: FavouriteItem[]): Promise<number>;
+      }>("TvChannel")
+    : null;
 
 /**
  * Publishes (or replaces) the "Prysm Favourites" preview channel on the
@@ -15,6 +20,6 @@ const TvChannelNative = NativeModulesProxy.TvChannel;
  * No-ops on iOS or Android < 8 (API 26).
  */
 export async function syncFavourites(items: FavouriteItem[]): Promise<void> {
-  if (Platform.OS !== "android" || !TvChannelNative) return;
+  if (!TvChannelNative) return;
   await TvChannelNative.syncFavourites(items);
 }

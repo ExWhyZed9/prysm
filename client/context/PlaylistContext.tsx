@@ -407,6 +407,8 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
     setFavorites([]);
     setFavoriteCategories([]);
     setRecentChannels([]);
+    // Clear the Android TV launcher home row so stale tiles don't linger
+    syncFavourites([]);
     setSettings({
       autoPlay: true,
       videoQuality: "auto",
