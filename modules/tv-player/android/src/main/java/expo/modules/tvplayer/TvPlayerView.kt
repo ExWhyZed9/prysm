@@ -15,6 +15,7 @@ import android.view.SurfaceView
 import android.view.TextureView
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.app.PictureInPictureParams
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -39,6 +40,12 @@ import okhttp3.OkHttpClient
 @SuppressLint("ViewConstructor")
 class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
 
+    // ExpoView extends LinearLayout. React Native suppresses requestLayout() by
+    // default (RN issue #17968), which prevents AspectRatioFrameLayout from
+    // re-measuring when the video aspect ratio or resize mode changes. Enabling
+    // shouldUseAndroidLayout forces measure+layout passes through.
+    override val shouldUseAndroidLayout: Boolean = true
+
     private var exoPlayer: ExoPlayer? = null
 
     private val isTV: Boolean = context.packageManager
@@ -56,11 +63,6 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
     private val aspectFrame = AspectRatioFrameLayout(context).apply {
         resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
         setAspectRatio(16f / 9f)
-        layoutParams = FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            Gravity.CENTER,
-        )
     }
 
     private val surfaceView: SurfaceView? = if (isTV) SurfaceView(context) else null
@@ -96,6 +98,12 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
     val onPipModeChange by EventDispatcher()
 
     init {
+        // ExpoView is a LinearLayout — set gravity so AspectRatioFrameLayout
+        // (which measures itself smaller in FIT mode) is centred on both axes.
+        gravity = Gravity.CENTER
+        orientation = VERTICAL
+
+        // Children of AspectRatioFrameLayout (a FrameLayout) use FrameLayout.LayoutParams.
         val fillParams = FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -105,16 +113,25 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
         } else {
             aspectFrame.addView(textureView, fillParams)
         }
-        addView(aspectFrame)
+
+        // Use LinearLayout.LayoutParams for the aspect frame since *this* view
+        // is a LinearLayout (via ExpoView). FrameLayout.LayoutParams gravity is
+        // silently dropped during the LinearLayout param conversion.
+        addView(aspectFrame, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            1f, // weight — takes all available space in the vertical LinearLayout
+        ))
     }
 
-    // ── Resize mode (called from JS contentFit prop if we add it later) ───────
+    // ── Resize mode (called from JS via setResizeMode command) ──────────────
     fun setResizeMode(mode: Int) {
         aspectFrame.resizeMode = mode
-        // Force a layout pass so AspectRatioFrameLayout applies the new mode
-        // immediately — without this the visual size doesn't update until the
-        // next unrelated layout event.
+        // Force a full measure+layout pass so the new mode takes effect
+        // immediately. requestLayout alone is swallowed by React Native unless
+        // shouldUseAndroidLayout is true.
         aspectFrame.requestLayout()
+        requestLayout()
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -391,6 +408,8 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
                 val ratio = videoSize.width.toFloat() /
                         (videoSize.height * videoSize.pixelWidthHeightRatio)
                 aspectFrame.setAspectRatio(ratio)
+                // Force re-layout so the new aspect ratio is applied immediately
+                requestLayout()
                 // Keep PiP aspect ratio in sync with the actual video dimensions
                 if (!isTV) {
                     PipRegistry.aspectRatio = Rational(videoSize.width, videoSize.height)
