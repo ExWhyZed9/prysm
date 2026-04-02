@@ -669,13 +669,8 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     .numberOfTaps(1)
     .onEnd(() => {
       if (showControlsRef.current) {
-        if (isTV) {
-          // On TV: tap hides the controls (same as Back)
-          runOnJS(hideControls)();
-        } else {
-          // On phone: tap resets the auto-hide timer
-          runOnJS(scheduleHideRef.current)();
-        }
+        // Controls visible: tap hides them on both TV and phone
+        runOnJS(hideControls)();
       } else {
         // Controls hidden: show them and start the auto-hide timer
         runOnJS(showAndScheduleHideRef.current)();
