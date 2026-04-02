@@ -872,6 +872,10 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
           style={[st.controlsOverlay, animControls]}
           pointerEvents={showControls && !isLocked ? "box-none" : "none"}
         >
+          {/* Dismiss layer — tapping anywhere that isn't a button hides controls */}
+          {!isTV ? (
+            <Pressable style={StyleSheet.absoluteFill} onPress={hideControls} />
+          ) : null}
           {/* ── Top bar ─────────────────────────────────────────────── */}
           <View
             style={[
