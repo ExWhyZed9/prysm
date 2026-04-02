@@ -292,6 +292,8 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   const [showSubtitleModal, setShowSubtitleModal] = useState(false);
 
   const [isInPiP, setIsInPiP] = useState(false);
+  // Ref mirror — read by setShowControls guard to block controls in PiP
+  const isInPiPRef = useRef(false);
 
   // Seek flash
   const [seekFlash, setSeekFlash] = useState<{
@@ -348,6 +350,9 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   // Drives both the state (for conditional rendering / focusability) and animation.
   const setShowControls = useCallback(
     (visible: boolean) => {
+      // Never show controls while in PiP — the tiny window can't be tapped
+      // and controls would cover the entire video.
+      if (visible && isInPiPRef.current) return;
       showControlsRef.current = visible;
       setShowControlsState(visible);
       controlsOpacity.value = withTiming(visible ? 1 : 0, { duration: 200 });
@@ -484,26 +489,36 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   const contentFitRef = useRef(contentFit);
   contentFitRef.current = contentFit;
 
-  // Listen for PiP mode changes from MainActivity
+  // Shared handler for PiP state changes — called from both the native
+  // view event (primary) and the DeviceEventEmitter fallback.
+  const handlePipChange = useCallback(
+    (isInPip: boolean) => {
+      isInPiPRef.current = isInPip;
+      setIsInPiP(isInPip);
+      if (isInPip) {
+        // Hide controls immediately — the PiP window is too small
+        setShowControls(false);
+        // Fill the tiny PiP window — letterboxing wastes precious space
+        TvPlayerCommands.setResizeMode(tvPlayerRef, "cover");
+      } else {
+        // Restore the user's chosen aspect-ratio mode
+        TvPlayerCommands.setResizeMode(tvPlayerRef, contentFitRef.current);
+      }
+    },
+    [setShowControls],
+  );
+
+  // Fallback: listen for PiP mode changes via DeviceEventEmitter from
+  // MainActivity. The native view event (onPipModeChange) is preferred but
+  // this catches the case where the view hasn't mounted yet.
   useEffect(() => {
     if (isTV) return;
     const sub = DeviceEventEmitter.addListener(
       "onPipModeChanged",
-      (e: { isInPiP: boolean }) => {
-        setIsInPiP(e.isInPiP);
-        if (e.isInPiP) {
-          // Hide controls immediately when entering PiP
-          setShowControls(false);
-          // Fill the tiny PiP window — letterboxing wastes precious space
-          TvPlayerCommands.setResizeMode(tvPlayerRef, "cover");
-        } else {
-          // Restore the user's chosen aspect-ratio mode
-          TvPlayerCommands.setResizeMode(tvPlayerRef, contentFitRef.current);
-        }
-      },
+      (e: { isInPiP: boolean }) => handlePipChange(e.isInPiP),
     );
     return () => sub.remove();
-  }, [setShowControls]);
+  }, [handlePipChange]);
 
   // ── TV D-pad handler ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -746,8 +761,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
               setNativeSubtitleTracks(e.nativeEvent.subtitleTracks);
             }}
             onPipModeChange={(e) => {
-              setIsInPiP(e.nativeEvent.isInPiP);
-              if (e.nativeEvent.isInPiP) setShowControls(false);
+              handlePipChange(e.nativeEvent.isInPiP);
             }}
           />
 

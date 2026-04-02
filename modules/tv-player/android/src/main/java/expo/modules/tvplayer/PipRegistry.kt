@@ -21,4 +21,11 @@ object PipRegistry {
 
     /** True while the activity is in PiP mode. Set by MainActivity. */
     @Volatile var isInPipMode: Boolean = false
+
+    /**
+     * Callback invoked by MainActivity.onPictureInPictureModeChanged().
+     * TvPlayerView registers here so it can fire the native view event
+     * (onPipModeChange) which reaches JS reliably even with New Architecture.
+     */
+    @Volatile var onPipModeChanged: ((Boolean) -> Unit)? = null
 }

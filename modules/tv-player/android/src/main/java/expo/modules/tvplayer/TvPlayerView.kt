@@ -122,6 +122,17 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
             ViewGroup.LayoutParams.MATCH_PARENT,
             1f, // weight — takes all available space in the vertical LinearLayout
         ))
+
+        // Register for PiP mode changes from MainActivity via PipRegistry.
+        // This fires the native view event which reaches JS reliably even
+        // with New Architecture (bridgeless), unlike DeviceEventEmitter.
+        if (!isTV) {
+            PipRegistry.onPipModeChanged = { isInPip ->
+                mainHandler.post {
+                    onPipModeChange(mapOf("isInPiP" to isInPip))
+                }
+            }
+        }
     }
 
     // ── Resize mode (called from JS via setResizeMode command) ──────────────
@@ -491,6 +502,8 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        // Unregister the PiP callback to avoid leaking this view.
+        if (!isTV) PipRegistry.onPipModeChanged = null
         if (backgroundAudioEnabled) {
             // Background audio is active — keep the player alive but detach the
             // video surface so the player doesn't attempt to render to a destroyed

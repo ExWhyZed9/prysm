@@ -177,11 +177,15 @@ function withTvPlayer(config) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         PipRegistry.isInPipMode = isInPictureInPictureMode
 
+        // Notify TvPlayerView so it can fire the native view event
+        // (onPipModeChange). This is the primary path — it works with both
+        // old and new React Native architectures.
+        PipRegistry.onPipModeChanged?.invoke(isInPictureInPictureMode)
+
         // Force the entire view tree to re-measure after the PiP window resize.
-        // React Native's Yoga layout doesn't always pick up the configuration
-        // change, leaving child native views (TvPlayerView) with stale bounds.
         window.decorView.rootView.requestLayout()
 
+        // Also emit via DeviceEventEmitter as a fallback for non-view listeners.
         try {
             val reactContext = reactInstanceManager?.currentReactContext ?: return
             val params = Arguments.createMap().apply {
