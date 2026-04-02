@@ -479,6 +479,11 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     };
   }, []);
 
+  // Keep a ref to the current contentFit so the PiP listener (which is
+  // registered once) always restores the correct mode on PiP exit.
+  const contentFitRef = useRef(contentFit);
+  contentFitRef.current = contentFit;
+
   // Listen for PiP mode changes from MainActivity
   useEffect(() => {
     if (isTV) return;
@@ -489,6 +494,11 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         if (e.isInPiP) {
           // Hide controls immediately when entering PiP
           setShowControls(false);
+          // Fill the tiny PiP window — letterboxing wastes precious space
+          TvPlayerCommands.setResizeMode(tvPlayerRef, "cover");
+        } else {
+          // Restore the user's chosen aspect-ratio mode
+          TvPlayerCommands.setResizeMode(tvPlayerRef, contentFitRef.current);
         }
       },
     );

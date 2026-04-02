@@ -2,7 +2,10 @@ const {
   withAndroidManifest,
   withAppBuildGradle,
   withSettingsGradle,
+  withDangerousMod,
 } = require("expo/config-plugins");
+const fs = require("fs");
+const path = require("path");
 
 /**
  * Expo config plugin for tv-player.
@@ -10,6 +13,7 @@ const {
  * Wires the native ExoPlayer module into the Android build and injects:
  *  - FOREGROUND_SERVICE + FOREGROUND_SERVICE_MEDIA_PLAYBACK permissions
  *  - TvPlayerService declaration (needed for background audio on TV)
+ *  - PiP handling in MainActivity (onUserLeaveHint, onPictureInPictureModeChanged)
  *  - settings.gradle / app/build.gradle entries
  */
 function withTvPlayer(config) {
@@ -102,6 +106,102 @@ function withTvPlayer(config) {
     }
     return cfg;
   });
+
+  // 4. MainActivity.kt — inject PiP handling (auto-enter on Home, relay state to JS)
+  config = withDangerousMod(config, [
+    "android",
+    async (cfg) => {
+      const pkg = cfg.android?.package ?? "com.prysmplayer.app";
+      const mainActivityPath = path.join(
+        cfg.modRequest.platformProjectRoot,
+        "app",
+        "src",
+        "main",
+        "java",
+        ...pkg.split("."),
+        "MainActivity.kt",
+      );
+
+      if (!fs.existsSync(mainActivityPath)) return cfg;
+
+      let src = fs.readFileSync(mainActivityPath, "utf-8");
+
+      // Skip if already patched
+      if (src.includes("PipRegistry")) return cfg;
+
+      // --- Add imports ---
+      const pipImports = [
+        "import android.app.PictureInPictureParams",
+        "import android.content.res.Configuration",
+        "import android.util.Rational",
+        "import com.facebook.react.bridge.Arguments",
+        "import com.facebook.react.modules.core.DeviceEventManagerModule",
+        "import expo.modules.tvplayer.PipRegistry",
+      ];
+      for (const imp of pipImports) {
+        if (!src.includes(imp)) {
+          // Insert after the last existing import
+          src = src.replace(/(import [^\n]+\n)(?!import)/, `$1${imp}\n`);
+        }
+      }
+
+      // --- Add PiP methods before the final closing brace of the class ---
+      const pipMethods = `
+    /**
+     * Auto-enter PiP when the user presses Home while the player is active.
+     * PipRegistry is set by TvPlayerView when a source is loaded on mobile.
+     */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && PipRegistry.isPlayerActive) {
+            try {
+                val ratio = PipRegistry.aspectRatio
+                val params = PictureInPictureParams.Builder()
+                    .setAspectRatio(Rational(ratio.numerator, ratio.denominator))
+                    .apply {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                            setAutoEnterEnabled(true)
+                            setSeamlessResizeEnabled(true)
+                        }
+                    }
+                    .build()
+                enterPictureInPictureMode(params)
+            } catch (_: Exception) {}
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration,
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        PipRegistry.isInPipMode = isInPictureInPictureMode
+
+        // Force the entire view tree to re-measure after the PiP window resize.
+        // React Native's Yoga layout doesn't always pick up the configuration
+        // change, leaving child native views (TvPlayerView) with stale bounds.
+        window.decorView.rootView.requestLayout()
+
+        try {
+            val reactContext = reactInstanceManager?.currentReactContext ?: return
+            val params = Arguments.createMap().apply {
+                putBoolean("isInPiP", isInPictureInPictureMode)
+            }
+            reactContext
+                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                .emit("onPipModeChanged", params)
+        } catch (_: Exception) {}
+    }
+`;
+
+      // Insert before the last closing brace of the class
+      const lastBrace = src.lastIndexOf("}");
+      src = src.slice(0, lastBrace) + pipMethods + src.slice(lastBrace);
+
+      fs.writeFileSync(mainActivityPath, src, "utf-8");
+      return cfg;
+    },
+  ]);
 
   return config;
 }
