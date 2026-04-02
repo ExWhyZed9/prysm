@@ -675,7 +675,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
 
   // ── Gestures ──────────────────────────────────────────────────────────────
 
-  // Hide controls immediately (used by tap gesture on TV)
+  // Hide controls immediately — used by the dismiss layer and gesture.
   const hideControls = useCallback(() => {
     setShowControls(false);
   }, [setShowControls]);
@@ -683,13 +683,16 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   const tapGesture = Gesture.Tap()
     .numberOfTaps(1)
     .onEnd(() => {
-      if (showControlsRef.current) {
-        // Controls visible: tap hides them on both TV and phone
-        runOnJS(hideControls)();
-      } else {
-        // Controls hidden: show them and start the auto-hide timer
-        runOnJS(showAndScheduleHideRef.current)();
-      }
+      // Use a single runOnJS call so both state updates happen in one JS
+      // frame — avoids the race where hide sets ref to false but show then
+      // sees the stale ref value and re-shows controls.
+      runOnJS(() => {
+        if (showControlsRef.current) {
+          setShowControls(false);
+        } else {
+          showAndScheduleHideRef.current();
+        }
+      })();
     });
 
   const doubleTapGesture = Gesture.Tap()
