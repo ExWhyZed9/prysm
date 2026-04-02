@@ -12,20 +12,28 @@ function withTvChannel(config) {
   config = withAndroidManifest(config, (cfg) => {
     const manifest = cfg.modResults.manifest;
 
-    // WRITE_EPG_DATA — required to insert preview channels and programs
     if (!manifest["uses-permission"]) manifest["uses-permission"] = [];
     const perms = manifest["uses-permission"].map((p) => p.$["android:name"]);
-    if (!perms.includes("com.android.providers.tv.permission.WRITE_EPG_DATA")) {
-      manifest["uses-permission"].push({
-        $: {
-          "android:name": "com.android.providers.tv.permission.WRITE_EPG_DATA",
-        },
-      });
+
+    // READ + WRITE EPG_DATA — required to query, insert, and update
+    // preview channels and programs via ContentResolver.
+    const requiredPerms = [
+      "com.android.providers.tv.permission.READ_EPG_DATA",
+      "com.android.providers.tv.permission.WRITE_EPG_DATA",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+    ];
+    for (const perm of requiredPerms) {
+      if (!perms.includes(perm)) {
+        manifest["uses-permission"].push({
+          $: { "android:name": perm },
+        });
+      }
     }
 
-    // TvChannelReceiver — re-publishes the preview channel after device reboot.
-    // ACTION_INITIALIZE_PROGRAMS is broadcast by the launcher to all apps that
-    // have previously registered a preview channel, asking them to re-publish.
+    // TvChannelReceiver — re-publishes the preview channel after device
+    // reboot and when the launcher requests channel re-initialization.
+    // SmartTube uses BOOT_COMPLETED + SCREEN_ON instead of (or alongside)
+    // ACTION_INITIALIZE_PROGRAMS for broader launcher compatibility.
     const app = manifest.application[0];
     if (!app.receiver) app.receiver = [];
     const receiverExists = app.receiver.some(
@@ -36,10 +44,26 @@ function withTvChannel(config) {
         $: {
           "android:name": RECEIVER_CLASS,
           "android:exported": "true",
+          "android:enabled": "true",
         },
         "intent-filter": [
           {
+            category: [
+              {
+                $: { "android:name": "android.intent.category.DEFAULT" },
+              },
+            ],
             action: [
+              {
+                $: {
+                  "android:name": "android.intent.action.BOOT_COMPLETED",
+                },
+              },
+              {
+                $: {
+                  "android:name": "android.intent.action.QUICKBOOT_POWERON",
+                },
+              },
               {
                 $: {
                   "android:name":
