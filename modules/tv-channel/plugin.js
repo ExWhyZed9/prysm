@@ -30,11 +30,37 @@ function withTvChannel(config) {
       }
     }
 
+    // FileProvider — serves cached logo bitmaps to the TV launcher via
+    // content:// URIs. The launcher is a separate app and can't read our
+    // file:// paths or download http:// URLs reliably.
+    const app = manifest.application[0];
+    const FILEPROVIDER_CLASS = "expo.modules.tvchannel.TvChannelFileProvider";
+    if (!app.provider) app.provider = [];
+    const providerExists = app.provider.some(
+      (p) => p.$["android:name"] === FILEPROVIDER_CLASS,
+    );
+    if (!providerExists) {
+      const pkg = cfg.android?.package ?? "com.prysmplayer.app";
+      app.provider.push({
+        $: {
+          "android:name": FILEPROVIDER_CLASS,
+          "android:authorities": `${pkg}.tvchannel.fileprovider`,
+          "android:exported": "false",
+          "android:grantUriPermissions": "true",
+        },
+        "meta-data": [
+          {
+            $: {
+              "android:name": "android.support.FILE_PROVIDER_PATHS",
+              "android:resource": "@xml/tvchannel_file_paths",
+            },
+          },
+        ],
+      });
+    }
+
     // TvChannelReceiver — re-publishes the preview channel after device
     // reboot and when the launcher requests channel re-initialization.
-    // SmartTube uses BOOT_COMPLETED + SCREEN_ON instead of (or alongside)
-    // ACTION_INITIALIZE_PROGRAMS for broader launcher compatibility.
-    const app = manifest.application[0];
     if (!app.receiver) app.receiver = [];
     const receiverExists = app.receiver.some(
       (r) => r.$["android:name"] === RECEIVER_CLASS,

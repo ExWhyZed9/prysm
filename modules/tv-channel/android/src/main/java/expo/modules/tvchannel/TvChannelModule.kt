@@ -5,9 +5,11 @@ import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.database.Cursor
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
+import androidx.core.content.FileProvider
 import androidx.tvprovider.media.tv.Channel
 import androidx.tvprovider.media.tv.ChannelLogoUtils
 import androidx.tvprovider.media.tv.PreviewProgram
@@ -19,6 +21,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
+import java.net.URL
 
 class TvChannelModule : Module() {
     companion object {
@@ -34,6 +39,9 @@ class TvChannelModule : Module() {
             TvContractCompat.Channels.COLUMN_INTERNAL_PROVIDER_ID,
             TvContractCompat.Channels.COLUMN_BROWSABLE,
         )
+
+        /** Directory inside cache for downloaded channel logos. */
+        private const val LOGO_CACHE_DIR = "channel_logos"
     }
 
     override fun definition() = ModuleDefinition {
@@ -63,19 +71,21 @@ class TvChannelModule : Module() {
                         null, null
                     )
 
+                    // Ensure logo cache directory exists
+                    val logoDir = File(ctx.cacheDir, LOGO_CACHE_DIR)
+                    if (!logoDir.exists()) logoDir.mkdirs()
+
                     var weight = items.size
                     for (item in items) {
                         val id   = item["id"]   as? String ?: continue
                         val name = item["name"] as? String ?: continue
                         val logo = item["logo"] as? String
 
-                        // Build a launch intent (not just a URI) — this is what
-                        // SmartTube and other working implementations use.
+                        // Build a launch intent (not just a URI).
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("prysmplayer://play?channelId=${Uri.encode(id)}"))
                             .addCategory(Intent.CATEGORY_BROWSABLE)
                             .addCategory(Intent.CATEGORY_DEFAULT)
 
-                        // Resolve the main activity so the intent is explicit.
                         val mainActivity = ctx.packageManager
                             .getLaunchIntentForPackage(ctx.packageName)
                             ?.component
@@ -91,12 +101,17 @@ class TvChannelModule : Module() {
                             .setInternalProviderId(id)
                             .setLive(true)
                             .setWeight(weight--)
-                            .setPosterArtAspectRatio(
-                                TvContractCompat.PreviewPrograms.ASPECT_RATIO_16_9
-                            )
 
-                        if (!logo.isNullOrEmpty()) {
-                            builder.setPosterArtUri(Uri.parse(logo))
+                        // Download logo and serve via FileProvider so the launcher
+                        // (a separate app) can read it. Remote http/https URIs set
+                        // directly on posterArtUri often fail because the launcher
+                        // blocks cleartext HTTP or can't reach the CDN.
+                        val logoUri = downloadAndCacheLogo(ctx, id, logo, logoDir)
+                        if (logoUri != null) {
+                            builder.setPosterArtUri(logoUri)
+                                .setPosterArtAspectRatio(
+                                    TvContractCompat.PreviewPrograms.ASPECT_RATIO_1_1
+                                )
                         }
 
                         try {
@@ -119,22 +134,67 @@ class TvChannelModule : Module() {
     }
 
     /**
+     * Downloads a logo from [url], saves it as a PNG in [cacheDir], and returns
+     * a `content://` URI via FileProvider that the launcher can read.
+     *
+     * Returns `null` if the URL is blank or the download fails.
+     * Uses a simple file-name-based cache: if the file already exists and is
+     * non-empty, the download is skipped.
+     */
+    private fun downloadAndCacheLogo(
+        ctx: Context,
+        channelId: String,
+        url: String?,
+        cacheDir: File,
+    ): Uri? {
+        if (url.isNullOrBlank()) return null
+
+        try {
+            // Sanitise the channel ID into a safe file name
+            val safeId = channelId.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+            val file = File(cacheDir, "${safeId}.png")
+
+            // Re-use cached file if it exists and is non-empty
+            if (!file.exists() || file.length() == 0L) {
+                val connection = URL(url).openConnection().apply {
+                    connectTimeout = 5_000
+                    readTimeout = 5_000
+                }
+                connection.getInputStream().use { input ->
+                    // Decode to Bitmap to normalise the format (handles JPEG, PNG,
+                    // WebP, etc.) then write as PNG so the launcher can read it.
+                    val bitmap = BitmapFactory.decodeStream(input) ?: return null
+                    FileOutputStream(file).use { out ->
+                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                    }
+                    bitmap.recycle()
+                }
+            }
+
+            if (!file.exists() || file.length() == 0L) return null
+
+            // Generate a content:// URI that other apps can read.
+            val authority = "${ctx.packageName}.tvchannel.fileprovider"
+            return FileProvider.getUriForFile(ctx, authority, file).also { uri ->
+                // Grant the TV launcher read access
+                ctx.grantUriPermission(
+                    "android.media.tv",
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+        } catch (_: Exception) {
+            return null
+        }
+    }
+
+    /**
      * Finds or creates the "Prysm Favourites" preview channel row.
-     *
-     * Uses [Channel.Builder] with [TvContractCompat.Channels.TYPE_PREVIEW]
-     * and [ContentResolver] directly — the same pattern SmartTube uses.
-     * [PreviewChannelHelper.publishDefaultChannel] silently fails on many
-     * launchers; the raw ContentResolver approach is more reliable.
-     *
-     * After creation, [TvContractCompat.requestChannelBrowsable] is called
-     * to make the row visible on the home screen without user interaction.
      */
     private fun getOrCreateChannel(ctx: Context): Long {
-        // Search for an existing channel with our internal provider ID.
         val existing = findChannelByProviderId(ctx, CHANNEL_INTERNAL_ID)
         if (existing != -1L) return existing
 
-        // Build channel using Channel (TYPE_PREVIEW), not PreviewChannel.
         val builder = Channel.Builder()
             .setDisplayName("Prysm Favourites")
             .setDescription("Your starred channels from Prysm")
@@ -149,21 +209,11 @@ class TvChannelModule : Module() {
         ) ?: return -1L
 
         val channelId = ContentUris.parseId(channelUri)
-
-        // Write the app icon as the channel logo.
         writeChannelLogo(ctx, channelId)
-
-        // Request browsable status so the channel appears on the home screen
-        // without the user having to manually enable it in "Customize channels".
         TvContractCompat.requestChannelBrowsable(ctx, channelId)
-
         return channelId
     }
 
-    /**
-     * Query all channels owned by this app and return the ID of the one
-     * matching [providerId], or -1 if not found.
-     */
     private fun findChannelByProviderId(ctx: Context, providerId: String): Long {
         var cursor: Cursor? = null
         try {
@@ -180,20 +230,14 @@ class TvChannelModule : Module() {
                 }
             }
         } catch (_: Exception) {
-            // Content provider may not exist on non-TV devices
         } finally {
             cursor?.close()
         }
         return -1L
     }
 
-    /**
-     * Writes the app's launcher icon as the channel logo bitmap.
-     * This makes the channel row show the Prysm icon next to the title.
-     */
     private fun writeChannelLogo(ctx: Context, channelId: Long) {
         try {
-            // Use the app's launcher icon (ic_launcher) as the channel logo.
             val iconRes = ctx.applicationInfo.icon
             if (iconRes != 0) {
                 val bitmap = BitmapFactory.decodeResource(ctx.resources, iconRes)
@@ -202,16 +246,9 @@ class TvChannelModule : Module() {
                     bitmap.recycle()
                 }
             }
-        } catch (_: Exception) {
-            // Non-fatal — channel works without a logo
-        }
+        } catch (_: Exception) {}
     }
 
-    /**
-     * Build an input ID for TvContractCompat. SmartTube uses
-     * [TvContractCompat.buildInputId] with a ComponentName pointing
-     * to the provider class itself.
-     */
     private fun createInputId(ctx: Context): String {
         return TvContractCompat.buildInputId(
             ComponentName(ctx, TvChannelModule::class.java)

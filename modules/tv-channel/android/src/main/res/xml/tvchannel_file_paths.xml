@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Expose the channel_logos subdirectory of the app's cache dir so the
+         TV launcher can read downloaded logo bitmaps via content:// URIs. -->
+    <cache-path name="channel_logos" path="channel_logos/" />
+</paths>

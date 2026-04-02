@@ -28,6 +28,7 @@ repositories {
 dependencies {
   implementation project(':expo-modules-core')
   implementation "org.jetbrains.kotlin:kotlin-stdlib:${getKotlinVersion()}"
+  implementation "androidx.core:core:1.15.0"
   implementation "androidx.tvprovider:tvprovider:1.1.0"
   implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
 }
