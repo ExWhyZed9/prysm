@@ -388,21 +388,34 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     }, CONTROLS_TIMEOUT_MS);
   }, [setShowControls]);
 
+  // Cancel any pending auto-hide timer — used when entering PiP to prevent
+  // the timer from firing and re-showing controls during the transition.
+  const cancelHideTimer = useCallback(() => {
+    if (controlsTimerRef.current) {
+      clearTimeout(controlsTimerRef.current);
+      controlsTimerRef.current = null;
+    }
+  }, []);
+
   const showAndScheduleHide = useCallback(() => {
     setShowControls(true);
     scheduleHide();
-  }, [setShowControls, scheduleHide]);
+  }, [setShowControls]);
 
   // Keep ref up-to-date so the TVEventHandler closure can read it without
   // needing to be recreated on every render.
   const scheduleHideRef = useRef(scheduleHide);
   const showAndScheduleHideRef = useRef(showAndScheduleHide);
+  const cancelHideTimerRef = useRef(cancelHideTimer);
   useEffect(() => {
     scheduleHideRef.current = scheduleHide;
   }, [scheduleHide]);
   useEffect(() => {
     showAndScheduleHideRef.current = showAndScheduleHide;
   }, [showAndScheduleHide]);
+  useEffect(() => {
+    cancelHideTimerRef.current = cancelHideTimer;
+  }, [cancelHideTimer]);
 
   // ── TV nextFocus node handles ─────────────────────────────────────────────
   // Computed once after the controls first become visible so the refs are
@@ -496,6 +509,9 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
       isInPiPRef.current = isInPip;
       setIsInPiP(isInPip);
       if (isInPip) {
+        // Cancel any pending auto-hide timer — prevents controls from briefly
+        // re-appearing during the PiP transition.
+        cancelHideTimerRef.current();
         // Hide controls immediately — the PiP window is too small
         setShowControls(false);
         // Fill the tiny PiP window — letterboxing wastes precious space

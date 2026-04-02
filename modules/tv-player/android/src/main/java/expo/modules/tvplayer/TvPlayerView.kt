@@ -128,6 +128,14 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
         // with New Architecture (bridgeless), unlike DeviceEventEmitter.
         if (!isTV) {
             PipRegistry.onPipModeChanged = { isInPip ->
+                if (isInPip) {
+                    // Switch to cover mode synchronously so the layout is already
+                    // correct when the window shrinks. Then force a layout pass.
+                    aspectFrame.resizeMode =
+                        AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                    aspectFrame.requestLayout()
+                    requestLayout()
+                }
                 mainHandler.post {
                     onPipModeChange(mapOf("isInPiP" to isInPip))
                 }
@@ -173,6 +181,13 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
         if (isTV) return
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val activity = appContext.currentActivity ?: return
+
+        // Switch to cover mode immediately so the aspect frame is already
+        // in the correct state before the window shrinks.
+        aspectFrame.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+        aspectFrame.requestLayout()
+        requestLayout()
+
         try {
             val ratio = PipRegistry.aspectRatio
             val params = PictureInPictureParams.Builder()
