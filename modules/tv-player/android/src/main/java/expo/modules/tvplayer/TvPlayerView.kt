@@ -223,7 +223,14 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
                 }
             }
             .build()
-        player.mediaMetadata = metadata
+
+        val currentItem = player.currentMediaItem
+        if (currentItem != null) {
+            val newItem = currentItem.buildUpon()
+                .setMediaMetadata(metadata)
+                .build()
+            player.setMediaItem(newItem)
+        }
     }
 
     /**
