@@ -209,6 +209,24 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
     fun isBackgroundAudioEnabled(): Boolean = backgroundAudioEnabled
 
     /**
+     * Updates the media metadata (title, artist, artwork) used by the system
+     * media notification and Now Playing controls.
+     */
+    fun setMediaMetadata(title: String, artist: String, artworkUri: String?) {
+        val player = exoPlayer ?: return
+        val metadata = androidx.media3.common.MediaMetadata.Builder()
+            .setTitle(title)
+            .setArtist(artist)
+            .apply {
+                if (!artworkUri.isNullOrBlank()) {
+                    setArtworkUri(android.net.Uri.parse(artworkUri))
+                }
+            }
+            .build()
+        player.mediaMetadata = metadata
+    }
+
+    /**
      * Select an audio track by its group + track index within the current tracks.
      * [groupIndex] and [trackIndex] correspond to the values sent in onTracksChange.
      */

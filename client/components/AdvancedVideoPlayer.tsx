@@ -663,6 +663,11 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         if (granted !== PermissionsAndroid.RESULTS.GRANTED) return;
       }
       TvPlayerCommands.enableBackgroundAudio(tvPlayerRef);
+      TvPlayerCommands.setMediaMetadata(tvPlayerRef, {
+        title: title || "",
+        artist: subtitle || "Live TV",
+        artworkUri: poster,
+      });
     }
     scheduleHideRef.current();
   }, [isBackgroundPlaying]);

@@ -114,6 +114,13 @@ class TvPlayerModule : Module() {
             AsyncFunction("enterPip") { view: TvPlayerView ->
                 view.enterPip()
             }
+
+            AsyncFunction("setMediaMetadata") { view: TvPlayerView, params: Map<String, Any?> ->
+                val title      = params["title"] as? String ?: ""
+                val artist     = params["artist"] as? String ?: "Prysm"
+                val artworkUri = params["artworkUri"] as? String
+                view.setMediaMetadata(title, artist, artworkUri)
+            }
         }
     }
 }

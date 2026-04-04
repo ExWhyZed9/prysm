@@ -31,6 +31,12 @@ export interface NativeSubtitleTrack {
   isSelected: boolean;
 }
 
+export interface MediaMetadataParams {
+  title: string;
+  artist?: string;
+  artworkUri?: string;
+}
+
 export interface TvPlayerViewProps {
   style?: ViewStyle;
   onReady?: () => void;
@@ -137,6 +143,12 @@ export const TvPlayerCommands = {
   /** Enter Picture-in-Picture mode (mobile only, no-op on TV). */
   enterPip: (viewRef: React.RefObject<any>): Promise<void> | undefined =>
     viewRef.current?.enterPip(),
+
+  /** Set media metadata for the system notification and Now Playing controls. */
+  setMediaMetadata: (
+    viewRef: React.RefObject<any>,
+    params: { title: string; artist?: string; artworkUri?: string },
+  ): Promise<void> | undefined => viewRef.current?.setMediaMetadata(params),
 };
 
 // ── React component ───────────────────────────────────────────────────────────
