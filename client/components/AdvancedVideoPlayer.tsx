@@ -696,22 +696,33 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
 
   // ── Gestures ──────────────────────────────────────────────────────────────
 
-  // Hide controls immediately — used by the dismiss layer and gesture.
+  // Hide controls immediately — used by the dismiss layer.
   const hideControls = useCallback(() => {
     setShowControls(false);
+  }, [setShowControls]);
+
+  // Toggle controls on tap — use ref to avoid stale closure. The ref is always
+  // up-to-date because setShowControls updates it immediately when called.
+  const toggleControls = useCallback(() => {
+    // Always read the current value from the ref, not from state
+    if (showControlsRef.current) {
+      setShowControls(false);
+    } else {
+      // Need to show controls - use the ref which was updated in useEffect
+      const showFn = showAndScheduleHideRef.current;
+      if (showFn) {
+        showFn();
+      } else {
+        // Fallback if ref not ready yet
+        setShowControls(true);
+      }
+    }
   }, [setShowControls]);
 
   const tapGesture = Gesture.Tap()
     .numberOfTaps(1)
     .onEnd(() => {
-      runOnJS(() => {
-        if (!showAndScheduleHideRef.current) return;
-        if (showControlsRef.current) {
-          setShowControls(false);
-        } else {
-          showAndScheduleHideRef.current();
-        }
-      })();
+      runOnJS(toggleControls)();
     });
 
   const doubleTapGesture = Gesture.Tap()
