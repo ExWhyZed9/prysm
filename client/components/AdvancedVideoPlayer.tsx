@@ -699,10 +699,8 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   const tapGesture = Gesture.Tap()
     .numberOfTaps(1)
     .onEnd(() => {
-      // Use a single runOnJS call so both state updates happen in one JS
-      // frame — avoids the race where hide sets ref to false but show then
-      // sees the stale ref value and re-shows controls.
       runOnJS(() => {
+        if (!showAndScheduleHideRef.current) return;
         if (showControlsRef.current) {
           setShowControls(false);
         } else {
