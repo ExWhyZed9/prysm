@@ -327,10 +327,17 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
         PipRegistry.isPlayerActive = false
         stopPoller()
         disableBackgroundAudio(silent = true)
-        exoPlayer?.let {
-            it.removeListener(aspectRatioListener)
-            it.removeListener(playerListener)
-            it.release()
+        exoPlayer?.let { player ->
+            // Remove listeners FIRST to prevent any pending callbacks from firing
+            // after we begin release. This avoids "Handler on dead thread" errors
+            // during rapid channel switching.
+            player.removeListener(aspectRatioListener)
+            player.removeListener(playerListener)
+            // Clear the video surface before release to ensure MediaCodec
+            // releases its resources and stops async callbacks.
+            player.setVideoSurface(null)
+            player.setVideoSurfaceView(null)
+            player.release()
         }
         exoPlayer = null
     }
