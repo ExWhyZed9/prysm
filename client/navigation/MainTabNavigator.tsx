@@ -1,5 +1,13 @@
 import React, { useState, useRef, useCallback } from "react";
-import { View, StyleSheet, Pressable, Platform, Dimensions, findNodeHandle, ViewStyle } from "react-native";
+import {
+  View,
+  StyleSheet,
+  Pressable,
+  Platform,
+  Dimensions,
+  findNodeHandle,
+  ViewStyle,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Device from "expo-device";
@@ -49,15 +57,28 @@ interface BottomTabItemProps {
   nextFocusRight?: React.RefObject<View | null>;
 }
 
-function SidebarItem({ icon, iconActive, label, isActive, onPress, compact, hasTVPreferredFocus, itemRef, nextFocusDown, nextFocusUp }: SidebarItemProps) {
+function SidebarItem({
+  icon,
+  iconActive,
+  label,
+  isActive,
+  onPress,
+  compact,
+  hasTVPreferredFocus,
+  itemRef,
+  nextFocusDown,
+  nextFocusUp,
+}: SidebarItemProps) {
   const [isFocused, setIsFocused] = useState(false);
   const { theme } = useTheme();
 
   const tvProps: any = {};
   if (isTV) {
     if (hasTVPreferredFocus) tvProps.hasTVPreferredFocus = true;
-    if (nextFocusDown?.current) tvProps.nextFocusDown = findNodeHandle(nextFocusDown.current);
-    if (nextFocusUp?.current) tvProps.nextFocusUp = findNodeHandle(nextFocusUp.current);
+    if (nextFocusDown?.current)
+      tvProps.nextFocusDown = findNodeHandle(nextFocusDown.current);
+    if (nextFocusUp?.current)
+      tvProps.nextFocusUp = findNodeHandle(nextFocusUp.current);
   }
 
   return (
@@ -70,23 +91,42 @@ function SidebarItem({ icon, iconActive, label, isActive, onPress, compact, hasT
       accessibilityLabel={label}
       accessibilityRole="button"
       {...tvProps}
-      style={[
-        styles.sidebarItem,
-        isActive && { backgroundColor: theme.primary + "20" },
-        isFocused && { borderWidth: 2, borderColor: theme.primary, backgroundColor: theme.primary + "40", transform: [{ scale: 1.08 }] },
-      ] as ViewStyle[]}
+      style={
+        [
+          styles.sidebarItem,
+          isActive && { backgroundColor: theme.primary + "20" },
+          isFocused && {
+            borderWidth: 2,
+            borderColor: theme.primary,
+            backgroundColor: theme.primary + "40",
+            transform: [{ scale: 1.08 }],
+          },
+        ] as ViewStyle[]
+      }
     >
       <Ionicons
         name={isActive ? iconActive : icon}
         size={compact ? 22 : 24}
-        color={isFocused ? theme.text : isActive ? theme.primary : theme.textSecondary}
+        color={
+          isFocused
+            ? theme.text
+            : isActive
+              ? theme.primary
+              : theme.textSecondary
+        }
       />
       {!compact ? (
         <ThemedText
           type="small"
           style={[
             styles.sidebarLabel,
-            { color: isFocused ? theme.text : isActive ? theme.primary : theme.textSecondary },
+            {
+              color: isFocused
+                ? theme.text
+                : isActive
+                  ? theme.primary
+                  : theme.textSecondary,
+            },
           ]}
         >
           {label}
@@ -96,15 +136,27 @@ function SidebarItem({ icon, iconActive, label, isActive, onPress, compact, hasT
   );
 }
 
-function BottomTabItem({ icon, iconActive, label, isActive, onPress, hasTVPreferredFocus, itemRef, nextFocusLeft, nextFocusRight }: BottomTabItemProps) {
+function BottomTabItem({
+  icon,
+  iconActive,
+  label,
+  isActive,
+  onPress,
+  hasTVPreferredFocus,
+  itemRef,
+  nextFocusLeft,
+  nextFocusRight,
+}: BottomTabItemProps) {
   const [isFocused, setIsFocused] = useState(false);
   const { theme } = useTheme();
 
   const tvProps: any = {};
   if (isTV) {
     if (hasTVPreferredFocus) tvProps.hasTVPreferredFocus = true;
-    if (nextFocusLeft?.current) tvProps.nextFocusLeft = findNodeHandle(nextFocusLeft.current);
-    if (nextFocusRight?.current) tvProps.nextFocusRight = findNodeHandle(nextFocusRight.current);
+    if (nextFocusLeft?.current)
+      tvProps.nextFocusLeft = findNodeHandle(nextFocusLeft.current);
+    if (nextFocusRight?.current)
+      tvProps.nextFocusRight = findNodeHandle(nextFocusRight.current);
   }
 
   return (
@@ -117,21 +169,41 @@ function BottomTabItem({ icon, iconActive, label, isActive, onPress, hasTVPrefer
       accessibilityLabel={label}
       accessibilityRole="button"
       {...tvProps}
-      style={[
-        styles.bottomTabItem,
-        isFocused && { borderWidth: 2, borderColor: theme.primary, borderRadius: BorderRadius.sm, backgroundColor: theme.primary + "40", transform: [{ scale: 1.08 }] },
-      ] as ViewStyle[]}
+      style={
+        [
+          styles.bottomTabItem,
+          isFocused && {
+            borderWidth: 2,
+            borderColor: theme.primary,
+            borderRadius: BorderRadius.sm,
+            backgroundColor: theme.primary + "40",
+            transform: [{ scale: 1.08 }],
+          },
+        ] as ViewStyle[]
+      }
     >
       <Ionicons
         name={isActive ? iconActive : icon}
         size={24}
-        color={isFocused ? theme.text : isActive ? theme.primary : theme.textSecondary}
+        color={
+          isFocused
+            ? theme.text
+            : isActive
+              ? theme.primary
+              : theme.textSecondary
+        }
       />
       <ThemedText
         type="caption"
         style={[
           styles.bottomTabLabel,
-          { color: isFocused ? theme.text : isActive ? theme.primary : theme.textSecondary },
+          {
+            color: isFocused
+              ? theme.text
+              : isActive
+                ? theme.primary
+                : theme.textSecondary,
+          },
         ]}
       >
         {label}
@@ -151,7 +223,8 @@ export default function MainTabNavigator() {
   const settingsRef = useRef<View>(null);
 
   const { width, height } = Dimensions.get("window");
-  const isTVDevice = Platform.isTV || Device.deviceType === Device.DeviceType.TV;
+  const isTVDevice =
+    Platform.isTV || Device.deviceType === Device.DeviceType.TV;
   const isLandscape = width > height;
   const useSidebar = isLandscape || isTVDevice;
   const compact = sidebarWidth < 90 || isExtraWide;
@@ -175,23 +248,34 @@ export default function MainTabNavigator() {
 
   if (useSidebar) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
+      <View
+        style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
+      >
         <View
           style={[
             styles.sidebar,
             {
               width: sidebarWidth,
+              marginLeft: insets.left,
               paddingTop: insets.top + Spacing.md,
               paddingBottom: insets.bottom + Spacing.md,
-              paddingLeft: insets.left + Spacing.xs,
+              paddingLeft: Spacing.xs,
+              paddingRight: Spacing.xs,
               backgroundColor: theme.backgroundDefault,
             },
           ]}
         >
           <View style={styles.sidebarHeader}>
-            <Ionicons name="tv" size={compact ? 26 : 30} color={theme.primary} />
+            <Ionicons
+              name="tv"
+              size={compact ? 26 : 30}
+              color={theme.primary}
+            />
             {!compact ? (
-              <ThemedText type="h4" style={[styles.sidebarTitle, { color: theme.primary }]}>
+              <ThemedText
+                type="h4"
+                style={[styles.sidebarTitle, { color: theme.primary }]}
+              >
                 IPTV
               </ThemedText>
             ) : null}
@@ -233,13 +317,20 @@ export default function MainTabNavigator() {
           </View>
         </View>
 
-        <View style={styles.content}>{renderScreen()}</View>
+        <View style={[styles.content, { paddingLeft: insets.left }]}>
+          {renderScreen()}
+        </View>
       </View>
     );
   }
 
   return (
-    <View style={[styles.container, { flexDirection: "column", backgroundColor: theme.backgroundRoot }]}>
+    <View
+      style={[
+        styles.container,
+        { flexDirection: "column", backgroundColor: theme.backgroundRoot },
+      ]}
+    >
       <View style={[styles.content, { paddingBottom: 60 + insets.bottom }]}>
         {renderScreen()}
       </View>
