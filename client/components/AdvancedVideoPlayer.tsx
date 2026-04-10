@@ -704,18 +704,17 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   // Toggle controls on tap — use ref to avoid stale closure. The ref is always
   // up-to-date because setShowControls updates it immediately when called.
   const toggleControls = useCallback(() => {
-    // Always read the current value from the ref, not from state
+    // If controls are visible, hide them directly
     if (showControlsRef.current) {
       setShowControls(false);
+      return;
+    }
+    // Controls are hidden — show them
+    const showFn = showAndScheduleHideRef.current;
+    if (showFn) {
+      showFn();
     } else {
-      // Need to show controls - use the ref which was updated in useEffect
-      const showFn = showAndScheduleHideRef.current;
-      if (showFn) {
-        showFn();
-      } else {
-        // Fallback if ref not ready yet
-        setShowControls(true);
-      }
+      setShowControls(true);
     }
   }, [setShowControls]);
 
