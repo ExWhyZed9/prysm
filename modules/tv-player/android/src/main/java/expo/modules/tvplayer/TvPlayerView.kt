@@ -463,8 +463,11 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
     private val aspectRatioListener = object : Player.Listener {
         override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
             if (videoSize.width > 0 && videoSize.height > 0) {
-                val ratio = videoSize.width.toFloat() /
-                        (videoSize.height * videoSize.pixelWidthHeightRatio)
+                // Display width accounts for pixel aspect ratio (PAR) — multiply
+                // width by pixelWidthHeightRatio to get the actual display width.
+                // E.g., 720x576 with PAR 1.422 (PAL) displays as 1024x576.
+                val ratio = (videoSize.width * videoSize.pixelWidthHeightRatio).toFloat() /
+                        videoSize.height
                 aspectFrame.setAspectRatio(ratio)
                 // Force re-layout so the new aspect ratio is applied immediately
                 requestLayout()
