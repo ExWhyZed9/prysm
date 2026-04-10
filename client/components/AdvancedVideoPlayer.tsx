@@ -703,7 +703,15 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
 
   // Toggle controls on tap — use ref to avoid stale closure. The ref is always
   // up-to-date because setShowControls updates it immediately when called.
+  // Use tapInProgressRef to prevent double-toggle when gesture fires alongside
+  // the overlay Pressable's onPress handler.
+  const tapInProgressRef = useRef(false);
   const toggleControls = useCallback(() => {
+    if (tapInProgressRef.current) return;
+    tapInProgressRef.current = true;
+    setTimeout(() => {
+      tapInProgressRef.current = false;
+    }, 300);
     // If controls are visible, hide them directly
     if (showControlsRef.current) {
       setShowControls(false);
@@ -904,10 +912,6 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
           style={[st.controlsOverlay, animControls]}
           pointerEvents={showControls && !isLocked ? "box-none" : "none"}
         >
-          {/* Dismiss layer — tapping anywhere that isn't a button hides controls */}
-          {!isTV ? (
-            <Pressable style={StyleSheet.absoluteFill} onPress={hideControls} />
-          ) : null}
           {/* ── Top bar ─────────────────────────────────────────────── */}
           <View
             style={[
