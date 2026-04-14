@@ -20,6 +20,7 @@ function stableChannelId(url: string): string {
 function parseDRM(
   lines: string[],
   currentIndex: number,
+  url: string,
 ): { drm?: DRMInfo; headers?: Record<string, string> } {
   const drm: DRMInfo = {};
   const headers: Record<string, string> = {};
@@ -51,6 +52,24 @@ function parseDRM(
     if (line.includes("#EXTVLCOPT:http-referrer=")) {
       headers["Referer"] = line.split("=").slice(1).join("=").trim();
       foundHeaders = true;
+    }
+  }
+
+  if (!foundDRM && url) {
+    try {
+      const urlObj = new URL(url);
+      if (urlObj.searchParams.has("hdnea")) {
+        drm.type = "widevine";
+        const hdntl = urlObj.searchParams.get("hdntl");
+        const hdnea = urlObj.searchParams.get("hdnea");
+        drm.licenseServer = hdntl || undefined;
+        if (hdnea) headers["Authorization"] = hdnea;
+        if (drm.licenseServer || headers["Authorization"]) {
+          foundDRM = true;
+        }
+      }
+    } catch {
+      // Invalid URL, ignore
     }
   }
 
@@ -104,7 +123,7 @@ export function parseM3U(
       currentChannel = parseExtInf(line);
       extinfIndex = i;
     } else if (line && !line.startsWith("#") && currentChannel.name) {
-      const { drm, headers } = parseDRM(lines, i);
+      const { drm, headers } = parseDRM(lines, i, line);
 
       const channel: Channel = {
         id: stableChannelId(line),

@@ -125,6 +125,13 @@ interface MinimalChannel {
   u: string;
   l?: string;
   g: string;
+  drm?: {
+    type?: "widevine" | "fairplay" | "playready" | "clearkey";
+    licenseServer?: string;
+    headers?: Record<string, string>;
+    certificateUrl?: string;
+  };
+  h?: Record<string, string>;
 }
 
 function minimizeChannel(channel: Channel): MinimalChannel {
@@ -135,6 +142,8 @@ function minimizeChannel(channel: Channel): MinimalChannel {
     g: channel.group,
   };
   if (channel.logo) min.l = channel.logo;
+  if (channel.drm) min.drm = channel.drm;
+  if (channel.headers) min.h = channel.headers;
   return min;
 }
 
@@ -145,6 +154,8 @@ function expandChannel(min: MinimalChannel): Channel {
     url: min.u,
     group: min.g,
     logo: min.l,
+    drm: min.drm,
+    headers: min.h,
   };
 }
 
