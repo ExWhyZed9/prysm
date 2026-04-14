@@ -109,11 +109,6 @@ export default function SetupScreen() {
   };
 
   const handleLoadFromFile = async () => {
-    if (!playlistName.trim()) {
-      setError("Please enter a playlist name before selecting a file");
-      return;
-    }
-
     try {
       setError(null);
       const result = await DocumentPicker.getDocumentAsync({
@@ -131,6 +126,10 @@ export default function SetupScreen() {
       }
 
       const file = result.assets[0];
+      if (!playlistName.trim()) {
+        setPlaylistName(file.name.replace(/\.m3u8?$/i, "") || "");
+      }
+
       setLoadingType("file");
       setShowLoadingModal(true);
       setLoadingProgress("Parsing playlist file...");
@@ -139,7 +138,11 @@ export default function SetupScreen() {
 
       const content = await FileSystem.readAsStringAsync(file.uri);
 
-      await loadPlaylistFromFile(content, playlistName.trim());
+      const nameToUse =
+        playlistName.trim() ||
+        file.name.replace(/\.m3u8?$/i, "") ||
+        "My Playlist";
+      await loadPlaylistFromFile(content, nameToUse);
       if (!isTVDevice)
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowLoadingModal(false);
@@ -381,8 +384,8 @@ export default function SetupScreen() {
                 onPress={handleLoadFromFile}
                 onFocus={() => setIsFileFocused(true)}
                 onBlur={() => setIsFileFocused(false)}
-                disabled={isLoadingPlaylist || !playlistName.trim()}
-                focusable={!isLoadingPlaylist && !!playlistName.trim()}
+                disabled={isLoadingPlaylist}
+                focusable={!isLoadingPlaylist}
                 accessibilityLabel="Choose file"
                 accessibilityRole="button"
                 style={
