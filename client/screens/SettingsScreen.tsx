@@ -504,7 +504,7 @@ export default function SettingsScreen() {
               <SettingsRow
                 icon="prism"
                 title="Prysm"
-                subtitle="Version 1.2.1"
+                subtitle="Version 1.2.2"
                 value=""
               />
               <SettingsRow
