@@ -337,6 +337,9 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
             // releases its resources and stops async callbacks.
             player.setVideoSurface(null)
             player.setVideoSurfaceView(null)
+            // Stop the player before releasing to ensure MediaCodec handlers
+            // are shut down cleanly and don't send messages to dead threads.
+            player.stop()
             player.release()
         }
         exoPlayer = null
@@ -397,6 +400,8 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
                     .setAllowAudioMixedMimeTypeAdaptiveness(true)
                     .setAllowAudioMixedChannelCountAdaptiveness(true)
                     .setAllowAudioMixedDecoderSupportAdaptiveness(true)
+                    // Force audio track selection even for audio-only streams
+                    .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
                     .build()
             )
         }
@@ -405,7 +410,7 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
             .setRenderersFactory(renderersFactory)
             .setTrackSelector(trackSelector)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
-            .setAudioAttributes(audioAttrs, /* handleAudioFocus= */ true)
+            .setAudioAttributes(audioAttrs, /* handleAudioFocus= */ false)
             .setHandleAudioBecomingNoisy(true)
             .build()
 
@@ -489,7 +494,7 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
                 }
                 Player.STATE_BUFFERING -> {
                     onBufferingChange(mapOf("isBuffering" to true))
-                    stopPoller()
+                    // Don't stop poller during buffering — position may still update
                 }
                 Player.STATE_ENDED,
                 Player.STATE_IDLE      -> stopPoller()
