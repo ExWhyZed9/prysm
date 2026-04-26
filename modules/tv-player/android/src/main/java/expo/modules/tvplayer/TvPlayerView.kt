@@ -23,6 +23,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaItem.DrmConfiguration
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -31,6 +32,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.SubtitleView
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
@@ -67,6 +69,7 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
 
     private val surfaceView: SurfaceView? = if (isTV) SurfaceView(context) else null
     private val textureView: TextureView? = if (!isTV) TextureView(context) else null
+    private val subtitleView = SubtitleView(context)
 
     // Background audio state
     private var backgroundAudioEnabled = false
@@ -113,6 +116,11 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
         } else {
             aspectFrame.addView(textureView, fillParams)
         }
+
+        // SubtitleView overlays on top of the video surface inside the
+        // AspectRatioFrameLayout so it scales with the video aspect ratio.
+        subtitleView.setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION)
+        aspectFrame.addView(subtitleView, fillParams)
 
         // Use LinearLayout.LayoutParams for the aspect frame since *this* view
         // is a LinearLayout (via ExpoView). FrameLayout.LayoutParams gravity is
@@ -333,6 +341,7 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
             // during rapid channel switching.
             player.removeListener(aspectRatioListener)
             player.removeListener(playerListener)
+            player.removeListener(subtitleListener)
             // Clear the video surface before release to ensure MediaCodec
             // releases its resources and stops async callbacks.
             player.setVideoSurface(null)
@@ -420,10 +429,12 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
             textureView != null -> attachTextureView(player, textureView)
         }
 
-        // aspectRatioListener and playerListener are named fields — they are removed
-        // cleanly in releasePlayer(), preventing leaks across load() calls.
+        // aspectRatioListener, playerListener, and subtitleListener are named
+        // fields — they are removed cleanly in releasePlayer(), preventing
+        // leaks across load() calls.
         player.addListener(aspectRatioListener)
         player.addListener(playerListener)
+        player.addListener(subtitleListener)
 
         val mediaItemBuilder = MediaItem.Builder().setUri(Uri.parse(url))
         if (!drmType.isNullOrEmpty() && !drmLicenseUrl.isNullOrEmpty()) {
@@ -481,6 +492,12 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
                     PipRegistry.aspectRatio = Rational(videoSize.width, videoSize.height)
                 }
             }
+        }
+    }
+
+    private val subtitleListener = object : Player.Listener {
+        override fun onCues(cueGroup: CueGroup) {
+            subtitleView.setCues(cueGroup.cues)
         }
     }
 
@@ -566,6 +583,7 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
             stopPoller()
             exoPlayer?.setVideoSurface(null)
             exoPlayer?.setVideoSurfaceView(null)
+            exoPlayer?.removeListener(subtitleListener)
         } else {
             // No background audio — release everything to avoid memory/battery leaks.
             releasePlayer()
