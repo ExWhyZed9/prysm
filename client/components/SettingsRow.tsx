@@ -21,6 +21,8 @@ interface SettingsRowProps {
   onPress?: () => void;
   showChevron?: boolean;
   destructive?: boolean;
+  disabled?: boolean;
+  rightComponent?: React.ReactNode;
 }
 
 export function SettingsRow({
@@ -34,6 +36,8 @@ export function SettingsRow({
   onPress,
   showChevron = false,
   destructive = false,
+  disabled = false,
+  rightComponent,
 }: SettingsRowProps) {
   const { theme } = useTheme();
   const [isFocused, setIsFocused] = useState(false);
@@ -98,6 +102,7 @@ export function SettingsRow({
           {value}
         </ThemedText>
       ) : null}
+      {rightComponent ? rightComponent : null}
       {showChevron ? (
         <Ionicons
           name="chevron-forward"
@@ -112,15 +117,16 @@ export function SettingsRow({
   if (onPress || isToggle) {
     return (
       <Pressable
-        onPress={onPress || (isToggle ? () => onToggle?.(!toggleValue) : undefined)}
+        onPress={disabled ? undefined : (onPress || (isToggle ? () => onToggle?.(!toggleValue) : undefined))}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
         focusable={true}
         accessibilityRole="button"
         accessibilityLabel={title}
+        disabled={disabled}
         style={[
           styles.pressable,
-          { backgroundColor: theme.backgroundDefault },
+          { backgroundColor: theme.backgroundDefault, opacity: disabled ? 0.5 : 1 },
           isFocused && styles.pressableFocused,
         ] as ViewStyle[]}
         testID={`settings-row-${title.toLowerCase().replace(/\s/g, "-")}`}

@@ -152,6 +152,7 @@ export default function SettingsScreen() {
     deletePlaylist,
     clearAllData,
     isLoadingPlaylist,
+    refreshPlaylist,
   } = usePlaylist();
 
   const [showQualityModal, setShowQualityModal] = useState(false);
@@ -185,6 +186,11 @@ export default function SettingsScreen() {
   const handleToggleRememberCategory = (value: boolean) => {
     if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     updateSettings({ rememberLastCategory: value });
+  };
+
+  const handleRefreshPlaylist = async () => {
+    if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await refreshPlaylist();
   };
 
   const handleQualitySelect = (value: typeof settings.videoQuality) => {
@@ -362,6 +368,28 @@ export default function SettingsScreen() {
                 value={getAutoRefreshLabel()}
                 onPress={() => setShowAutoRefreshModal(true)}
                 showChevron
+              />
+              <SettingsRow
+                icon="refresh-circle"
+                title="Refresh Playlist Now"
+                subtitle={
+                  playlist?.url
+                    ? (() => {
+                        try {
+                          return `Re-fetch from ${new URL(playlist.url).hostname}`;
+                        } catch {
+                          return "Re-fetch from source";
+                        }
+                      })()
+                    : "No URL configured"
+                }
+                onPress={handleRefreshPlaylist}
+                disabled={!playlist?.url || isLoadingPlaylist}
+                rightComponent={
+                  isLoadingPlaylist ? (
+                    <ActivityIndicator size="small" color={theme.primary} />
+                  ) : undefined
+                }
               />
             </View>
 
