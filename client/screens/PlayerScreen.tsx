@@ -163,11 +163,11 @@ export default function PlayerScreen() {
   }, []);
 
   const getDRMConfig = useCallback((): DRMConfig | undefined => {
-    if (!channel?.drm) return undefined;
+    if (!channel?.drm || !channel.drm.type || !channel.drm.licenseServer) return undefined;
 
     return {
-      type: channel.drm.type || "widevine",
-      licenseServer: channel.drm.licenseServer || "",
+      type: channel.drm.type,
+      licenseServer: channel.drm.licenseServer,
       headers: channel.drm.headers,
       certificateUrl: channel.drm.certificateUrl,
     };

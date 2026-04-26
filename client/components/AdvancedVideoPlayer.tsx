@@ -134,7 +134,7 @@ function TVFocusablePressable({
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface DRMConfig {
-  type: "widevine" | "fairplay" | "playready" | "clearkey";
+  type: "widevine" | "playready" | "clearkey";
   licenseServer: string;
   headers?: Record<string, string>;
   certificateUrl?: string;

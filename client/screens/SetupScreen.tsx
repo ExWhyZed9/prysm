@@ -117,6 +117,11 @@ export default function SetupScreen() {
           "audio/x-mpegurl",
           "audio/mpegurl",
           "application/vnd.apple.mpegurl",
+          "audio/x-scpls",
+          "application/pls+xml",
+          "application/xspf+xml",
+          "application/json",
+          "*/*",
         ],
         copyToCacheDirectory: true,
       });
@@ -127,7 +132,7 @@ export default function SetupScreen() {
 
       const file = result.assets[0];
       if (!playlistName.trim()) {
-        setPlaylistName(file.name.replace(/\.m3u8?$/i, "") || "");
+        setPlaylistName(file.name.replace(/\.(m3u8?|pls|xspf|json)$/i, "") || "");
       }
 
       setLoadingType("file");
@@ -140,7 +145,7 @@ export default function SetupScreen() {
 
       const nameToUse =
         playlistName.trim() ||
-        file.name.replace(/\.m3u8?$/i, "") ||
+        file.name.replace(/\.(m3u8?|pls|xspf|json)$/i, "") ||
         "My Playlist";
       await loadPlaylistFromFile(content, nameToUse);
       if (!isTVDevice)

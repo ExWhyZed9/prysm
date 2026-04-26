@@ -11,7 +11,7 @@ import React, {
 import { AppState, AppStateStatus } from "react-native";
 import { Channel, Playlist } from "@/types/playlist";
 import * as storage from "@/lib/storage";
-import { parseM3U, fetchAndParseM3U } from "@/lib/m3u-parser";
+import { parseM3U, fetchAndParseM3U, parsePlaylist, fetchAndParsePlaylist } from "@/lib/m3u-parser";
 import { syncFavourites } from "@/lib/tv-channel";
 
 interface PlaylistContextType {
@@ -129,7 +129,7 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
     if (!currentPlaylistInfo?.url) return;
 
     try {
-      const newPlaylist = await fetchAndParseM3U(
+      const newPlaylist = await fetchAndParsePlaylist(
         currentPlaylistInfo.url,
         currentPlaylistInfo.name,
       );
@@ -248,7 +248,7 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
     try {
       setIsLoadingPlaylist(true);
       setError(null);
-      const newPlaylist = await fetchAndParseM3U(url, name);
+      const newPlaylist = await fetchAndParsePlaylist(url, name);
       await storage.savePlaylist(newPlaylist, "m3u");
       setPlaylist(newPlaylist);
       setActivePlaylistId(newPlaylist.id);
@@ -266,7 +266,7 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
     try {
       setIsLoadingPlaylist(true);
       setError(null);
-      const newPlaylist = parseM3U(content, name);
+      const newPlaylist = parsePlaylist(content, name);
       await storage.savePlaylist(newPlaylist, "m3u");
       setPlaylist(newPlaylist);
       setActivePlaylistId(newPlaylist.id);
@@ -307,7 +307,7 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
 
       if (urlChanged && url) {
         setIsLoadingPlaylist(true);
-        const newPlaylist = await fetchAndParseM3U(url, name);
+        const newPlaylist = await fetchAndParsePlaylist(url, name);
         newPlaylist.id = playlistId;
         await storage.savePlaylist(newPlaylist, "m3u");
 
@@ -429,7 +429,7 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
     try {
       setIsLoadingPlaylist(true);
       setError(null);
-      const newPlaylist = await fetchAndParseM3U(
+      const newPlaylist = await fetchAndParsePlaylist(
         currentPlaylistInfo.url,
         currentPlaylistInfo.name,
       );
