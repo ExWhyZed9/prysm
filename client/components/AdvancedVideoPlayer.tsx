@@ -19,6 +19,8 @@ import {
   findNodeHandle,
   DeviceEventEmitter,
   useWindowDimensions,
+  AppState,
+  AppStateStatus,
 } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
@@ -497,6 +499,40 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     };
   }, []);
 
+  // Auto-enter PiP on mobile / background audio on TV when app goes to background.
+  // On reopen, ensure video is reattached and playing.
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (nextAppState === "background" || nextAppState === "inactive") {
+        if (isTV) {
+          // TV: auto-enable background audio when minimizing
+          if (isPlaying && !isBackgroundPlayingRef.current) {
+            TvPlayerCommands.enableBackgroundAudio(tvPlayerRef);
+            TvPlayerCommands.setMediaMetadata(tvPlayerRef, {
+              title: title || "",
+              artist: subtitle || "Live TV",
+              artworkUri: poster,
+            });
+          }
+        } else if (Platform.OS === "android") {
+          // Mobile: auto-enter PiP when minimizing
+          if (isPlaying && !isInPiPRef.current) {
+            TvPlayerCommands.enterPip(tvPlayerRef);
+          }
+        }
+      } else if (nextAppState === "active") {
+        // App came back to foreground
+        if (isTV && isBackgroundPlayingRef.current) {
+          // Re-attach video surface if background audio was active
+          TvPlayerCommands.play(tvPlayerRef);
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener("change", handleAppStateChange);
+    return () => subscription.remove();
+  }, [isPlaying, title, subtitle, poster]);
+
   // Keep a ref to the current contentFit so the PiP listener (which is
   // registered once) always restores the correct mode on PiP exit.
   const contentFitRef = useRef(contentFit);
@@ -517,11 +553,15 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         // Fill the tiny PiP window — letterboxing wastes precious space
         TvPlayerCommands.setResizeMode(tvPlayerRef, "cover");
       } else {
-        // Restore the user's chosen aspect-ratio mode
+        // Exiting PiP — restore the user's chosen aspect-ratio mode and
+        // ensure the video surface is reattached.
         TvPlayerCommands.setResizeMode(tvPlayerRef, contentFitRef.current);
+        if (isPlaying) {
+          TvPlayerCommands.play(tvPlayerRef);
+        }
       }
     },
-    [setShowControls],
+    [setShowControls, isPlaying],
   );
 
   // Fallback: listen for PiP mode changes via DeviceEventEmitter from

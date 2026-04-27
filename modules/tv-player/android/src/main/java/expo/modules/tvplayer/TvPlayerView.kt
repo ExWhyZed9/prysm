@@ -136,6 +136,7 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
         // with New Architecture (bridgeless), unlike DeviceEventEmitter.
         if (!isTV) {
             PipRegistry.onPipModeChanged = { isInPip ->
+                PipRegistry.isInPipMode = isInPip
                 if (isInPip) {
                     // Switch to cover mode synchronously so the layout is already
                     // correct when the window shrinks. Then force a layout pass.
@@ -143,6 +144,18 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
                         AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     aspectFrame.requestLayout()
                     requestLayout()
+                } else {
+                    // Exiting PiP — re-attach video surface if it was detached
+                    val player = exoPlayer
+                    if (player != null && !backgroundAudioEnabled) {
+                        when {
+                            surfaceView != null -> player.setVideoSurfaceView(surfaceView)
+                            textureView != null -> attachTextureView(player, textureView)
+                        }
+                        mainHandler.post {
+                            player.playWhenReady = true
+                        }
+                    }
                 }
                 mainHandler.post {
                     onPipModeChange(mapOf("isInPiP" to isInPip))
@@ -584,6 +597,16 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
             exoPlayer?.setVideoSurface(null)
             exoPlayer?.setVideoSurfaceView(null)
             exoPlayer?.removeListener(subtitleListener)
+        } else if (PipRegistry.isInPipMode) {
+            // App is going to background via PiP — keep the player alive so
+            // video continues in the PiP window. Detach surface only if the
+            // view is truly being destroyed (not just hidden for PiP).
+            exoPlayer?.setVideoSurface(null)
+            exoPlayer?.setVideoSurfaceView(null)
+        } else if (isTV) {
+            // TV: keep the player alive when minimizing (background audio mode)
+            exoPlayer?.setVideoSurface(null)
+            exoPlayer?.setVideoSurfaceView(null)
         } else {
             // No background audio — release everything to avoid memory/battery leaks.
             releasePlayer()
@@ -593,9 +616,10 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         // Re-attach the video surface when the view comes back to the foreground
-        // (e.g. user returns from launcher while background audio is playing).
-        if (backgroundAudioEnabled) {
-            val player = exoPlayer ?: return
+        // (e.g. user returns from launcher while background audio is playing,
+        // or exits PiP mode on mobile).
+        val player = exoPlayer ?: return
+        if (backgroundAudioEnabled || PipRegistry.isInPipMode) {
             when {
                 isTV && surfaceView != null -> player.setVideoSurfaceView(surfaceView)
                 textureView != null -> attachTextureView(player, textureView)
