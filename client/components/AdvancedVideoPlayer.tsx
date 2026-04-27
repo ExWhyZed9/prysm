@@ -517,6 +517,8 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
         } else if (Platform.OS === "android") {
           // Mobile: auto-enter PiP when minimizing
           if (isPlaying && !isInPiPRef.current) {
+            cancelHideTimerRef.current();
+            setShowControls(false);
             TvPlayerCommands.enterPip(tvPlayerRef);
           }
         }
@@ -711,6 +713,15 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     }
     scheduleHideRef.current();
   }, [isBackgroundPlaying]);
+
+  // Hide controls before entering PiP so the title/controls don't flash
+  // in the PiP window during the transition.
+  const handleEnterPip = useCallback(() => {
+    if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    cancelHideTimerRef.current();
+    setShowControls(false);
+    TvPlayerCommands.enterPip(tvPlayerRef);
+  }, []);
 
   // ── Channel navigation ────────────────────────────────────────────────────
   // Stop background audio before switching channels so the old stream doesn't
@@ -1048,7 +1059,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
               {/* PiP — mobile only */}
               {!isTV && Platform.OS === "android" ? (
                 <TVFocusablePressable
-                  onPress={() => TvPlayerCommands.enterPip(tvPlayerRef)}
+                  onPress={handleEnterPip}
                   baseStyle={st.iconBtn}
                   focusedStyle={st.iconBtnFocused}
                   focusable={showControls}
