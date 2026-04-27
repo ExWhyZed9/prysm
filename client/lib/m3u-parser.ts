@@ -1,4 +1,5 @@
 import { Channel, Playlist, DRMInfo } from "@/types/playlist";
+import { Platform } from "react-native";
 
 function generateId(): string {
   return (
@@ -491,7 +492,13 @@ function parseJSONArray(items: any[], playlistName: string = "My Playlist"): Pla
  * Fetches and parses any playlist format
  */
 export async function fetchAndParsePlaylist(url: string, customName?: string): Promise<Playlist> {
-  try {
+  let content: string;
+
+  if (Platform.OS === "android") {
+    // Use native OkHttp fetcher — React Native's fetch strips User-Agent on Android
+    const { nativeFetchPlaylist } = require("../../modules/tv-player/src/index");
+    content = await nativeFetchPlaylist(url);
+  } else {
     const response = await fetch(url, {
       headers: {
         "User-Agent": PRYSM_USER_AGENT,
@@ -504,27 +511,19 @@ export async function fetchAndParsePlaylist(url: string, customName?: string): P
         "Could not fetch playlist. The server may be blocking requests or require specific app authentication.",
       );
     }
-
-    const content = await response.text();
-
-    const urlParts = url.split("/");
-    const fileName = urlParts[urlParts.length - 1]
-      .split("?")[0]
-      .replace(/\.(m3u8?|pls|xspf|json)$/i, "");
-    const playlistName = customName || fileName || "Remote Playlist";
-
-    const playlist = parsePlaylist(content, playlistName);
-    playlist.url = url;
-
-    return playlist;
-  } catch (e: any) {
-    if (e.message && e.message.includes("Unsupported playlist format")) {
-      throw e;
-    }
-    throw new Error(
-      "Could not fetch playlist. The server may be blocking requests or require specific app authentication.",
-    );
+    content = await response.text();
   }
+
+  const urlParts = url.split("/");
+  const fileName = urlParts[urlParts.length - 1]
+    .split("?")[0]
+    .replace(/\.(m3u8?|pls|xspf|json)$/i, "");
+  const playlistName = customName || fileName || "Remote Playlist";
+
+  const playlist = parsePlaylist(content, playlistName);
+  playlist.url = url;
+
+  return playlist;
 }
 
 export { parseM3U, fetchAndParseM3U, parsePLS, parseXSPF, parsePlaylist, fetchAndParsePlaylist };
