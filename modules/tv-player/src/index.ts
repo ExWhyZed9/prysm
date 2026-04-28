@@ -1,4 +1,4 @@
-import { requireNativeViewManager, NativeModule, Platform } from "expo-modules-core";
+import { requireNativeViewManager, requireOptionalNativeModule, Platform } from "expo-modules-core";
 import React from "react";
 import { ViewStyle } from "react-native";
 
@@ -70,9 +70,17 @@ const NativeTvPlayerView =
 
 // ── Native module (for module-level functions like fetchPlaylist) ─────────────
 
+interface TvPlayerModuleType {
+  fetchPlaylist(url: string): Promise<{
+    success: boolean;
+    content: string;
+    error: string;
+  }>;
+}
+
 const TvPlayerModule =
   Platform.OS === "android"
-    ? new NativeModule({ name: "TvPlayer" })
+    ? requireOptionalNativeModule<TvPlayerModuleType>("TvPlayer")
     : null;
 
 // ── Imperative commands ───────────────────────────────────────────────────────
@@ -161,8 +169,8 @@ export const TvPlayerCommands = {
 // ── Native playlist fetcher (uses OkHttp with browser User-Agent) ─────────────
 
 export async function nativeFetchPlaylist(url: string): Promise<string> {
-  if (Platform.OS !== "android" || !TvPlayerModule) {
-    throw new Error("Native fetch only available on Android");
+  if (!TvPlayerModule) {
+    throw new Error("Native fetch not available");
   }
   const result = await TvPlayerModule.fetchPlaylist(url);
   if (!result.success) {

@@ -492,13 +492,18 @@ function parseJSONArray(items: any[], playlistName: string = "My Playlist"): Pla
  * Fetches and parses any playlist format
  */
 export async function fetchAndParsePlaylist(url: string, customName?: string): Promise<Playlist> {
-  let content: string;
+  let content: string | null = null;
 
   if (Platform.OS === "android") {
-    // Use native OkHttp fetcher — React Native's fetch strips User-Agent on Android
-    const { nativeFetchPlaylist } = require("../../modules/tv-player/src/index");
-    content = await nativeFetchPlaylist(url);
-  } else {
+    try {
+      const { nativeFetchPlaylist } = require("../../modules/tv-player/src/index");
+      content = await nativeFetchPlaylist(url);
+    } catch (e) {
+      console.warn("Native playlist fetch failed, falling back:", e);
+    }
+  }
+
+  if (!content) {
     const response = await fetch(url, {
       headers: {
         "User-Agent": PRYSM_USER_AGENT,
@@ -511,7 +516,12 @@ export async function fetchAndParsePlaylist(url: string, customName?: string): P
         "Could not fetch playlist. The server may be blocking requests or require specific app authentication.",
       );
     }
+
     content = await response.text();
+  }
+
+  if (!content.includes("#EXTM3U") && !content.includes("#EXTINF")) {
+    throw new Error("Unsupported playlist format. Supported formats: M3U, M3U8, PLS, XSPF, JSON");
   }
 
   const urlParts = url.split("/");
