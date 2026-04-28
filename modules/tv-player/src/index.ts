@@ -173,8 +173,8 @@ export async function nativeFetchPlaylist(url: string): Promise<string> {
     throw new Error("Native fetch not available");
   }
   const result = await TvPlayerModule.fetchPlaylist(url);
-  if (!result.success) {
-    throw new Error(result.error || "Failed to fetch playlist");
+  if (!result || !result.success) {
+    throw new Error(result?.error || "Failed to fetch playlist");
   }
   return result.content;
 }
