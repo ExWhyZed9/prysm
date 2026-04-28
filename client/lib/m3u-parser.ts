@@ -1,5 +1,4 @@
 import { Channel, Playlist, DRMInfo } from "@/types/playlist";
-import { Platform } from "react-native";
 
 function generateId(): string {
   return (
@@ -492,33 +491,20 @@ function parseJSONArray(items: any[], playlistName: string = "My Playlist"): Pla
  * Fetches and parses any playlist format
  */
 export async function fetchAndParsePlaylist(url: string, customName?: string): Promise<Playlist> {
-  let content: string | null = null;
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent": PRYSM_USER_AGENT,
+      Accept: "*/*",
+    },
+  });
 
-  if (Platform.OS === "android") {
-    try {
-      const { nativeFetchPlaylist } = require("../../modules/tv-player/src/index");
-      content = await nativeFetchPlaylist(url);
-    } catch (e) {
-      console.warn("Native playlist fetch failed, falling back:", e);
-    }
+  if (!response.ok) {
+    throw new Error(
+      "Could not fetch playlist. The server may be blocking requests or require specific app authentication.",
+    );
   }
 
-  if (!content) {
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": PRYSM_USER_AGENT,
-        Accept: "*/*",
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(
-        "Could not fetch playlist. The server may be blocking requests or require specific app authentication.",
-      );
-    }
-
-    content = await response.text();
-  }
+  const content = await response.text();
 
   if (!content.includes("#EXTM3U") && !content.includes("#EXTINF")) {
     throw new Error("Unsupported playlist format. Supported formats: M3U, M3U8, PLS, XSPF, JSON");
