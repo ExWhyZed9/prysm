@@ -93,7 +93,6 @@ function FocusableCategoryItem({
               : "transparent",
           },
           isFocused && {
-            borderColor: Colors.dark.primary,
             backgroundColor: Colors.dark.primary + "30",
           },
         ] as ViewStyle[]
@@ -180,8 +179,6 @@ function FocusableMenuButton({
           styles.menuButton,
           { backgroundColor: theme.backgroundSecondary },
           isFocused && {
-            borderWidth: 2,
-            borderColor: Colors.dark.primary,
             backgroundColor: Colors.dark.primary + "30",
           },
         ] as ViewStyle[]
@@ -829,7 +826,6 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   closeButtonFocused: {
-    borderColor: Colors.dark.primary,
     backgroundColor: Colors.dark.primary + "20",
   },
 
@@ -868,7 +864,6 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   categoryFavButtonFocused: {
-    borderColor: Colors.dark.primary,
     backgroundColor: Colors.dark.primary + "20",
   },
 });

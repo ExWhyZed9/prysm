@@ -88,7 +88,6 @@ export function CategoryChip({
           borderColor: isFocused ? Colors.dark.primary : isActive ? Colors.dark.primary : isFavorite ? Colors.dark.primary + "60" : "transparent",
         },
         isFocused && {
-          borderColor: Colors.dark.primary,
           borderWidth: 2,
           backgroundColor: Colors.dark.primary + "30",
           transform: [{ scale: 1.08 }],

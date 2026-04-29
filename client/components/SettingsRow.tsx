@@ -151,9 +151,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   pressableFocused: {
-    borderWidth: 2,
-    borderColor: Colors.dark.primary,
-    backgroundColor: Colors.dark.primary + "30",
+    backgroundColor: Colors.dark.primary + "25",
     transform: [{ scale: 1.02 }],
   },
   container: {

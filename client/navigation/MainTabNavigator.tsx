@@ -96,8 +96,6 @@ function SidebarItem({
           styles.sidebarItem,
           isActive && { backgroundColor: theme.primary + "20" },
           isFocused && {
-            borderWidth: 2,
-            borderColor: theme.primary,
             backgroundColor: theme.primary + "40",
             transform: [{ scale: 1.08 }],
           },
@@ -173,8 +171,6 @@ function BottomTabItem({
         [
           styles.bottomTabItem,
           isFocused && {
-            borderWidth: 2,
-            borderColor: theme.primary,
             borderRadius: BorderRadius.sm,
             backgroundColor: theme.primary + "40",
             transform: [{ scale: 1.08 }],

@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   containerFocused: {
-    borderColor: Colors.dark.primary,
+    backgroundColor: Colors.dark.primary + "15",
   },
   icon: {
     marginRight: Spacing.sm,
@@ -106,8 +106,6 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.xs,
   },
   clearButtonFocused: {
-    borderWidth: 1,
-    borderColor: Colors.dark.primary,
     backgroundColor: Colors.dark.primary + "20",
   },
 });

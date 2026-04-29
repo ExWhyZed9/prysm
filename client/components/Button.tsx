@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
   },
   buttonFocused: {
     borderWidth: 2,
-    borderColor: Colors.dark.primary,
+    backgroundColor: Colors.dark.primary + "20",
     transform: [{ scale: 1.05 }],
     shadowColor: Colors.dark.primary,
     shadowOffset: { width: 0, height: 0 },

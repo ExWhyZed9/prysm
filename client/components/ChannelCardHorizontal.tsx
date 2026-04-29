@@ -93,11 +93,10 @@ function ChannelCardHorizontalInner({
         styles.card,
         {
           backgroundColor: isFocused
-            ? Colors.dark.primary + "20"
+            ? Colors.dark.primary + "25"
             : themeBackground,
           width: cardWidth - 4,
           margin: 2,
-          borderColor: isFocused ? Colors.dark.primary : "transparent",
           transform: isFocused ? [{ scale: 1.03 }] : undefined,
         },
       ]}
@@ -218,8 +217,7 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   favoriteButtonFocused: {
-    borderColor: Colors.dark.primary,
-    backgroundColor: "rgba(0,0,0,0.8)",
+    backgroundColor: Colors.dark.primary + "40",
     transform: [{ scale: 1.2 }],
   },
   info: {

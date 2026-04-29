@@ -1147,7 +1147,6 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   modalOptionFocused: {
-    borderColor: Colors.dark.primary,
     backgroundColor: Colors.dark.primary + "30",
     transform: [{ scale: 1.03 }],
   },
@@ -1181,12 +1180,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.06)",
   },
   tvActionButtonFocused: {
-    borderColor: Colors.dark.primary,
     backgroundColor: Colors.dark.primary + "20",
     transform: [{ scale: 1.03 }],
   },
   tvActionButtonDestructiveFocused: {
-    borderColor: Colors.dark.error,
     backgroundColor: Colors.dark.error + "20",
     transform: [{ scale: 1.03 }],
   },
@@ -1215,7 +1212,6 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   deleteButtonFocused: {
-    borderColor: Colors.dark.error,
     backgroundColor: Colors.dark.error + "20",
   },
   editButton: {
@@ -1225,7 +1221,6 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   editButtonFocused: {
-    borderColor: Colors.dark.primary,
     backgroundColor: Colors.dark.primary + "20",
   },
   editInputContainer: {

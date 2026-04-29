@@ -656,7 +656,6 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   modalOptionFocused: {
-    borderColor: Colors.dark.primary,
     backgroundColor: Colors.dark.primary + "30",
     transform: [{ scale: 1.02 }],
   },
@@ -664,8 +663,6 @@ const styles = StyleSheet.create({
 
   // Generic focus border for FocusablePressable default
   focusedBorder: {
-    borderWidth: 2,
-    borderColor: Colors.dark.primary,
     backgroundColor: Colors.dark.primary + "20",
   },
 });

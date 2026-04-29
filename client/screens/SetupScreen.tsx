@@ -612,7 +612,6 @@ const styles = StyleSheet.create({
     minWidth: 120,
   },
   fileButtonFocused: {
-    borderColor: Colors.dark.primary,
     borderStyle: "solid",
     backgroundColor: Colors.dark.primary + "15",
     transform: [{ scale: 1.02 }],
@@ -663,7 +662,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   cancelButtonFocused: {
-    borderColor: Colors.dark.primary,
     backgroundColor: Colors.dark.primary + "20",
   },
   header: {
@@ -686,7 +684,6 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   closeButtonFocused: {
-    borderColor: Colors.dark.primary,
     backgroundColor: Colors.dark.primary + "20",
   },
 });

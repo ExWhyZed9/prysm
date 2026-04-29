@@ -57,9 +57,8 @@ function ChannelCardInner({
         styles.card,
         {
           backgroundColor: isFocused
-            ? Colors.dark.primary + "20"
+            ? Colors.dark.primary + "25"
             : themeBackground,
-          borderColor: isFocused ? Colors.dark.primary : "transparent",
           transform: isFocused ? [{ scale: 1.03 }] : undefined,
         },
       ]}
@@ -171,7 +170,6 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   favoriteButtonFocused: {
-    borderColor: Colors.dark.primary,
     backgroundColor: Colors.dark.primary + "20",
   },
 });

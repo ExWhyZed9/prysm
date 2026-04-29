@@ -408,8 +408,6 @@ const styles = StyleSheet.create({
     borderColor: Colors.dark.primary + "40",
   },
   tabFocused: {
-    borderWidth: 2,
-    borderColor: Colors.dark.primary,
     backgroundColor: Colors.dark.primary + "30",
     transform: [{ scale: 1.08 }],
   },

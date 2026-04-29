@@ -114,7 +114,6 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   cardFocused: {
-    borderColor: Colors.dark.primary,
     backgroundColor: Colors.dark.primary + "30",
     transform: [{ scale: 1.03 }],
   },

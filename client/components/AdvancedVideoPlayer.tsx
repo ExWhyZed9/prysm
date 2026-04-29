@@ -2195,7 +2195,6 @@ const st = StyleSheet.create({
     backgroundColor: Colors.dark.primary + "20",
   },
   iconBtnFocused: {
-    borderColor: Colors.dark.primary,
     backgroundColor: Colors.dark.primary + "40",
     transform: [{ scale: 1.1 }],
   },
@@ -2215,7 +2214,6 @@ const st = StyleSheet.create({
     borderColor: "transparent",
   },
   playBtnFocused: {
-    borderColor: "#fff",
     transform: [{ scale: 1.08 }],
   },
   navBtn: {
@@ -2226,7 +2224,6 @@ const st = StyleSheet.create({
     borderColor: "transparent",
   },
   navBtnFocused: {
-    borderColor: Colors.dark.primary,
     backgroundColor: "rgba(255,255,255,0.28)",
     transform: [{ scale: 1.08 }],
   },
@@ -2254,7 +2251,6 @@ const st = StyleSheet.create({
     borderColor: "transparent",
   },
   seekBarFocused: {
-    borderColor: Colors.dark.primary,
     backgroundColor: "rgba(255,255,255,0.08)",
   },
   seekBarTrack: {
@@ -2358,7 +2354,6 @@ const st = StyleSheet.create({
     borderColor: Colors.dark.primary,
   },
   toolBtnFocused: {
-    borderColor: Colors.dark.primary,
     backgroundColor: "rgba(255,255,255,0.28)",
     transform: [{ scale: 1.12 }],
   },
@@ -2395,7 +2390,6 @@ const st = StyleSheet.create({
     borderRadius: BorderRadius.xs,
   },
   recentItemFocused: {
-    borderColor: Colors.dark.primary,
     backgroundColor: "rgba(255,255,255,0.07)",
   },
   recentLogo: {
@@ -2439,7 +2433,6 @@ const st = StyleSheet.create({
     marginBottom: 2,
   },
   settingsRowFocused: {
-    borderColor: Colors.dark.primary,
     backgroundColor: Colors.dark.primary + "20",
   },
   optionRow: {
@@ -2457,9 +2450,6 @@ const st = StyleSheet.create({
     backgroundColor: Colors.dark.primary + "18",
   },
   optionRowFocused: {
-    borderColor: Colors.dark.primary,
-    // No transform: scale — scaling inside ScrollView clips at container bounds
-    // causing a torn/clipped appearance on the focused item
     backgroundColor: Colors.dark.primary + "30",
   },
   emptyState: {
