@@ -141,7 +141,7 @@ export default function SetupScreen() {
       abortRef.current = false;
       if (!isTVDevice) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-      const content = await FileSystem.readAsStringAsync(file.uri);
+      const content = await new FileSystem.File(file.uri).text();
 
       const nameToUse =
         playlistName.trim() ||
