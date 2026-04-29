@@ -693,7 +693,7 @@ export default function ChannelsScreen() {
                     onPress={() => handleCategoryChange(cat)}
                     onFavoritePress={handleCategoryFavoritePress}
                     theme={theme}
-                    hasTVPreferredFocus={isTV && index === 0}
+                    hasTVPreferredFocus={isTV && isSelected}
                   />
                 );
               }}
