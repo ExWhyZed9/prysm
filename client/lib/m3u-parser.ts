@@ -142,6 +142,20 @@ function parseExtInf(line: string): Partial<Channel> {
   );
   if (qualityMatch) channel.quality = qualityMatch[1].toUpperCase();
 
+  // Extract http-user-agent and http-referrer attributes from EXTINF line
+  // (some playlists put them here instead of using #EXTVLCOPT lines)
+  const userAgentMatch = line.match(/http-user-agent="([^"]*)"/i);
+  if (userAgentMatch) {
+    channel.headers = channel.headers || {};
+    channel.headers["User-Agent"] = userAgentMatch[1];
+  }
+
+  const referrerMatch = line.match(/http-referrer="([^"]*)"/i);
+  if (referrerMatch) {
+    channel.headers = channel.headers || {};
+    channel.headers["Referer"] = referrerMatch[1];
+  }
+
   const nameMatch = line.match(/,(.+)$/);
   if (nameMatch) channel.name = nameMatch[1].trim();
 
@@ -166,12 +180,14 @@ export function parseM3U(
       currentChannel = parseExtInf(line);
       extinfIndex = i;
     } else if (line && !line.startsWith("#") && currentChannel.name) {
-      const { drm, headers } = parseDRM(lines, i, line);
+      const { drm, headers: drmHeaders } = parseDRM(lines, i, line);
 
-      const { cleanUrl, urlHeaders } = parseUrlHeaders(line);
+      const { cleanUrl, headers: urlHeaders } = parseUrlHeaders(line);
 
-      // Merge headers from EXTVLCOPT and URL syntax, URL syntax takes precedence
-      const mergedHeaders = headers ? { ...headers, ...urlHeaders } : Object.keys(urlHeaders).length > 0 ? urlHeaders : undefined;
+      // Merge headers from all sources (priority: URL syntax > EXTVLCOPT > EXTINF attributes)
+      const extinfHeaders = currentChannel.headers || {};
+      const mergedHeaders = { ...extinfHeaders, ...(drmHeaders || {}), ...urlHeaders };
+      const finalHeaders = Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined;
 
       const channel: Channel = {
         id: stableChannelId(cleanUrl),
@@ -183,7 +199,7 @@ export function parseM3U(
         tvgName: currentChannel.tvgName,
         quality: currentChannel.quality,
         drm: drm,
-        headers: mergedHeaders,
+        headers: finalHeaders,
         isLive: true,
       };
 
@@ -279,7 +295,7 @@ export function parsePLS(content: string, playlistName: string = "My Playlist"):
       const urlMatch = line.match(/file\d*=(.+)/i);
       if (urlMatch) {
         const url = urlMatch[1].trim();
-        const { cleanUrl, urlHeaders } = parseUrlHeaders(url);
+        const { cleanUrl, headers: urlHeaders } = parseUrlHeaders(url);
         const channel: Channel = {
           id: stableChannelId(cleanUrl),
           name: currentTitle || "Unknown Channel",
@@ -364,7 +380,7 @@ export function parseXSPF(content: string, playlistName: string = "My Playlist")
 
     if (locationMatch) {
       const url = locationMatch[1].trim();
-      const { cleanUrl, urlHeaders } = parseUrlHeaders(url);
+      const { cleanUrl, headers: urlHeaders } = parseUrlHeaders(url);
 
       let group = creatorMatch ? creatorMatch[1].trim() : "Uncategorized";
       if (annotationMatch && !creatorMatch) {
@@ -453,7 +469,7 @@ function parseJSONArray(items: any[], playlistName: string = "My Playlist"): Pla
     if (!item.url) continue;
 
     const url = typeof item.url === "string" ? item.url : "";
-    const { cleanUrl, urlHeaders } = parseUrlHeaders(url);
+    const { cleanUrl, headers: urlHeaders } = parseUrlHeaders(url);
 
     const channel: Channel = {
       id: stableChannelId(cleanUrl),
@@ -506,7 +522,7 @@ export async function fetchAndParsePlaylist(url: string, customName?: string): P
 
   const content = await response.text();
 
-  if (!content.includes("#EXTM3U") && !content.includes("#EXTINF")) {
+  if (!content || (!content.includes("#EXTM3U") && !content.includes("#EXTINF"))) {
     throw new Error("Unsupported playlist format. Supported formats: M3U, M3U8, PLS, XSPF, JSON");
   }
 
@@ -516,10 +532,11 @@ export async function fetchAndParsePlaylist(url: string, customName?: string): P
     .replace(/\.(m3u8?|pls|xspf|json)$/i, "");
   const playlistName = customName || fileName || "Remote Playlist";
 
-  const playlist = parsePlaylist(content, playlistName);
-  playlist.url = url;
-
-  return playlist;
+  try {
+    const playlist = parsePlaylist(content, playlistName);
+    playlist.url = url;
+    return playlist;
+  } catch (parseError: any) {
+    throw new Error(`Failed to parse playlist: ${parseError.message || "Unknown parsing error"}`);
+  }
 }
-
-export { parseM3U, fetchAndParseM3U, parsePLS, parseXSPF, parsePlaylist, fetchAndParsePlaylist };
