@@ -297,6 +297,16 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   // Ref mirror — read by setShowControls guard to block controls in PiP
   const isInPiPRef = useRef(false);
 
+  // Seek bar drag state — tracks the thumb position while the user is
+  // dragging. When the drag ends we commit the seek to the player.
+  const [seekDrag, setSeekDrag] = useState<{
+    active: boolean;
+    progress: number; // 0–1
+  }>({ active: false, progress: 0 });
+  const seekDragPreviewMs = seekDrag.active
+    ? Math.floor(seekDrag.progress * durationMs)
+    : null;
+
   // Seek flash
   const [seekFlash, setSeekFlash] = useState<{
     visible: boolean;
@@ -656,22 +666,22 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
 
   const handleSeek = useCallback(
     (offsetMs: number) => {
-      if (isLive) return;
+      if (durationMs <= 0) return;
       if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       const newPos = Math.max(0, Math.min(positionMs + offsetMs, durationMs));
       TvPlayerCommands.seekTo(tvPlayerRef, newPos);
       scheduleHideRef.current();
     },
-    [positionMs, durationMs, isLive],
+    [positionMs, durationMs],
   );
 
   const handleSeekToPercent = useCallback(
     (pct: number) => {
-      if (isLive || durationMs <= 0) return;
+      if (durationMs <= 0) return;
       TvPlayerCommands.seekTo(tvPlayerRef, Math.floor(pct * durationMs));
       scheduleHideRef.current();
     },
-    [durationMs, isLive],
+    [durationMs],
   );
 
   const handleQualitySelect = useCallback(
@@ -786,7 +796,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   const doubleTapGesture = Gesture.Tap()
     .numberOfTaps(2)
     .onEnd((evt) => {
-      if (isLive) return;
+      if (durationMs <= 0) return;
       const dir = evt.x < width / 2 ? "backward" : "forward";
       runOnJS(handleSeek)(dir === "backward" ? -SEEK_MS : SEEK_MS);
       if (!isTV)
@@ -800,6 +810,31 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     });
 
   const composedGesture = Gesture.Exclusive(doubleTapGesture, tapGesture);
+
+  // Seek bar pan gesture — drag the thumb to preview and commit a seek position
+  const seekBarPan = Gesture.Pan()
+    .minDistance(0)
+    .onBegin((evt) => {
+      if (seekBarWidthRef.current <= 0 || durationMs <= 0) return;
+      const pct = Math.min(1, Math.max(0, evt.x / seekBarWidthRef.current));
+      runOnJS(setSeekDrag)({ active: true, progress: pct });
+    })
+    .onUpdate((evt) => {
+      if (seekBarWidthRef.current <= 0 || durationMs <= 0) return;
+      const pct = Math.min(1, Math.max(0, evt.x / seekBarWidthRef.current));
+      runOnJS(setSeekDrag)({ active: true, progress: pct });
+    })
+    .onEnd(() => {
+      runOnJS(setSeekDrag)((prev) => {
+        if (!prev.active) return prev;
+        // Commit the seek
+        runOnJS(handleSeekToPercent)(prev.progress);
+        return { active: false, progress: prev.progress };
+      });
+    })
+    .onFinalize(() => {
+      runOnJS(setSeekDrag)({ active: false, progress: 0 });
+    });
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const progress = durationMs > 0 ? positionMs / durationMs : 0;
@@ -1117,7 +1152,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                   color="#fff"
                 />
               </TVFocusablePressable>
-            ) : !isLive ? (
+            ) : (
               <TVFocusablePressable
                 onPress={() => handleSeek(-SEEK_MS)}
                 baseStyle={[
@@ -1139,13 +1174,6 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                   color="#fff"
                 />
               </TVFocusablePressable>
-            ) : (
-              <View
-                style={{
-                  width: playerControls.nav,
-                  height: playerControls.nav,
-                }}
-              />
             )}
 
             {/* Play / Pause — always preferred focus on TV when controls are visible */}
@@ -1197,7 +1225,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                   color="#fff"
                 />
               </TVFocusablePressable>
-            ) : !isLive ? (
+            ) : (
               <TVFocusablePressable
                 onPress={() => handleSeek(SEEK_MS)}
                 baseStyle={[
@@ -1219,13 +1247,6 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                   color="#fff"
                 />
               </TVFocusablePressable>
-            ) : (
-              <View
-                style={{
-                  width: playerControls.nav,
-                  height: playerControls.nav,
-                }}
-              />
             )}
           </View>
 
@@ -1245,58 +1266,74 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                VOD:  shows position / duration with a tappable seek bar. */}
             <View style={st.progressRow}>
               <ThemedText type="caption" style={st.timeText}>
-                {formatTime(positionMs)}
+                {formatTime(seekDrag.active ? seekDragPreviewMs! : positionMs)}
               </ThemedText>
-              {isLive ? (
-                /* Live streams: non-interactive progress indicator */
+              {durationMs <= 0 ? (
+                /* Unknown duration: non-interactive progress indicator */
                 <View style={st.seekBar} pointerEvents="none">
                   <View style={st.seekBarTrack}>
                     <View style={[st.seekBarFill, { width: "100%" }]} />
                   </View>
                 </View>
               ) : (
-                /* VOD: tappable seek bar */
-                <Pressable
-                  ref={seekBarRef}
-                  style={[st.seekBar, seekBarFocused && st.seekBarFocused]}
-                  focusable={showControls}
-                  onFocus={() => setSeekBarFocused(true)}
-                  onBlur={() => setSeekBarFocused(false)}
-                  nextFocusUp={nh.playPause ?? undefined}
-                  nextFocusDown={nh.firstTool ?? undefined}
-                  onLayout={(e) => {
-                    seekBarWidthRef.current = e.nativeEvent.layout.width || 1;
-                  }}
-                  onPress={(e) => {
-                    handleSeekToPercent(
-                      Math.min(
-                        1,
-                        Math.max(
-                          0,
-                          e.nativeEvent.locationX / seekBarWidthRef.current,
+                /* Draggable seek bar (VOD + live with DVR) */
+                <GestureDetector gesture={seekBarPan}>
+                  <Pressable
+                    ref={seekBarRef}
+                    style={[st.seekBar, seekBarFocused && st.seekBarFocused]}
+                    focusable={showControls}
+                    onFocus={() => setSeekBarFocused(true)}
+                    onBlur={() => setSeekBarFocused(false)}
+                    nextFocusUp={nh.playPause ?? undefined}
+                    nextFocusDown={nh.firstTool ?? undefined}
+                    onLayout={(e) => {
+                      seekBarWidthRef.current = e.nativeEvent.layout.width || 1;
+                    }}
+                    onPress={(e) => {
+                      handleSeekToPercent(
+                        Math.min(
+                          1,
+                          Math.max(
+                            0,
+                            e.nativeEvent.locationX / seekBarWidthRef.current,
+                          ),
                         ),
-                      ),
-                    );
-                  }}
-                >
-                  <View
-                    style={[
-                      st.seekBarTrack,
-                      seekBarFocused && st.seekBarTrackFocused,
-                    ]}
+                      );
+                    }}
                   >
                     <View
-                      style={[st.seekBarFill, { width: `${progress * 100}%` }]}
-                    />
-                    <View
                       style={[
-                        st.seekThumb,
-                        { left: `${progress * 100}%` },
-                        seekBarFocused && st.seekThumbFocused,
+                        st.seekBarTrack,
+                        seekBarFocused && st.seekBarTrackFocused,
                       ]}
-                    />
-                  </View>
-                </Pressable>
+                    >
+                      <View
+                        style={[st.seekBarFill, { width: `${(seekDrag.active ? seekDrag.progress : progress) * 100}%` }]}
+                      />
+                      <View
+                        style={[
+                          st.seekThumb,
+                          { left: `${(seekDrag.active ? seekDrag.progress : progress) * 100}%` },
+                          seekBarFocused && st.seekThumbFocused,
+                        ]}
+                      />
+                    </View>
+                    {/* Preview tooltip while dragging */}
+                    {seekDrag.active && (
+                      <View
+                        style={[
+                          st.seekTooltip,
+                          { left: `${seekDrag.progress * 100}%` },
+                        ]}
+                        pointerEvents="none"
+                      >
+                        <ThemedText type="caption" style={st.seekTooltipText}>
+                          {formatTime(seekDragPreviewMs!)}
+                        </ThemedText>
+                      </View>
+                    )}
+                  </Pressable>
+                </GestureDetector>
               )}
               <ThemedText type="caption" style={st.timeText}>
                 {isLive ? "LIVE" : formatTime(durationMs)}
@@ -2251,6 +2288,20 @@ const st = StyleSheet.create({
     marginLeft: -10,
     borderWidth: 2,
     borderColor: "#fff",
+  },
+  seekTooltip: {
+    position: "absolute",
+    bottom: "100%",
+    marginBottom: 8,
+    marginLeft: -24,
+    backgroundColor: "rgba(0,0,0,0.85)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.xs,
+  },
+  seekTooltipText: {
+    color: "#fff",
+    fontWeight: "600",
   },
   bottomRow: {
     flexDirection: "row",
