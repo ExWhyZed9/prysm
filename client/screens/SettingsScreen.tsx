@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   StyleSheet,
   View,
@@ -16,6 +16,7 @@ import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as IntentLauncher from "expo-intent-launcher";
 
 import { ThemedView } from "@/components/ThemedView";
 import { ThemedText } from "@/components/ThemedText";
@@ -26,6 +27,12 @@ import { usePlaylist } from "@/context/PlaylistContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
+import {
+  checkForUpdate,
+  downloadApk,
+  getDownloadedApkPath,
+  UpdateInfo,
+} from "@/utils/updateChecker";
 
 type SettingsNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -168,10 +175,28 @@ export default function SettingsScreen() {
   const [editPlaylistName, setEditPlaylistName] = useState("");
   const [editPlaylistUrl, setEditPlaylistUrl] = useState("");
 
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [checkingForUpdate, setCheckingForUpdate] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [downloadingApk, setDownloadingApk] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [installingApk, setInstallingApk] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+
   const isTV = Platform.isTV;
   const useColumns = width > 700;
   // On TV and very wide screens show two columns of settings side by side
   const useTwoColumns = isTV || width > 900;
+
+  useEffect(() => {
+    const initializeUpdateCheck = async () => {
+      const info = await checkForUpdate();
+      if (info) {
+        setUpdateInfo(info);
+      }
+    };
+    initializeUpdateCheck();
+  }, []);
 
   const handleToggleAutoPlay = (value: boolean) => {
     if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -280,6 +305,64 @@ export default function SettingsScreen() {
         console.error("Failed to update playlist:", err);
       }
     }
+  };
+
+  const handleCheckForUpdate = async () => {
+    if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setCheckingForUpdate(true);
+    setUpdateError(null);
+    try {
+      const info = await checkForUpdate();
+      if (info) {
+        setUpdateInfo(info);
+      } else {
+        setUpdateError("Unable to check for updates");
+      }
+    } catch (error) {
+      setUpdateError("Failed to check for updates");
+    } finally {
+      setCheckingForUpdate(false);
+    }
+  };
+
+  const handleDownloadAndInstall = async () => {
+    if (!updateInfo?.apkUrl) return;
+    if (!isTV)
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setDownloadingApk(true);
+    setDownloadProgress(0);
+    setUpdateError(null);
+    try {
+      const apkPath = await downloadApk(updateInfo.apkUrl, (progress) => {
+        setDownloadProgress(Math.round(progress * 100));
+      });
+      if (!apkPath) {
+        setUpdateError("Failed to download update");
+        return;
+      }
+      setDownloadingApk(false);
+      setInstallingApk(true);
+      await IntentLauncher.startActivityAsync(
+        "android.intent.action.INSTALL_PACKAGE",
+        {
+          data: apkPath,
+          flags: 1,
+        },
+      );
+    } catch (error) {
+      console.error("Error installing update:", error);
+      setUpdateError("Failed to install update");
+    } finally {
+      setDownloadingApk(false);
+      setInstallingApk(false);
+    }
+  };
+
+  const handleOpenUpdateModal = () => {
+    if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setUpdateError(null);
+    setDownloadProgress(0);
+    setShowUpdateModal(true);
   };
 
   const getQualityLabel = () => {
@@ -513,6 +596,28 @@ export default function SettingsScreen() {
                 subtitle="ExWhyZed9"
                 value=""
               />
+              {updateInfo?.available ? (
+                <SettingsRow
+                  icon="download"
+                  title="Update Available"
+                  subtitle={`Version ${updateInfo.latestVersion} ready to install`}
+                  onPress={handleOpenUpdateModal}
+                  showChevron
+                />
+              ) : (
+                <SettingsRow
+                  icon="refresh"
+                  title="Check for Updates"
+                  subtitle={`Current version ${updateInfo?.currentVersion || "1.2.2"}`}
+                  onPress={handleCheckForUpdate}
+                  disabled={checkingForUpdate}
+                  rightComponent={
+                    checkingForUpdate ? (
+                      <ActivityIndicator size="small" color={theme.primary} />
+                    ) : undefined
+                  }
+                />
+              )}
             </View>
           </View>
         </View>
@@ -1069,6 +1174,125 @@ export default function SettingsScreen() {
           </View>
         </Pressable>
       </Modal>
+
+      <Modal
+        visible={showUpdateModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() =>
+          !downloadingApk && !installingApk && setShowUpdateModal(false)
+        }
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() =>
+            !downloadingApk && !installingApk && setShowUpdateModal(false)
+          }
+          focusable={!isTV}
+        >
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.backgroundDefault },
+            ]}
+          >
+            <View style={styles.confirmIcon}>
+              <Ionicons name="cloud-download" size={32} color={theme.primary} />
+            </View>
+            <ThemedText type="h4" style={styles.modalTitle}>
+              Update to v{updateInfo?.latestVersion}
+            </ThemedText>
+            {updateInfo?.releaseNotes && (
+              <ScrollView
+                style={[
+                  styles.releaseNotesContainer,
+                  { backgroundColor: theme.backgroundSecondary },
+                ]}
+                contentContainerStyle={styles.releaseNotesContent}
+              >
+                <ThemedText
+                  type="small"
+                  style={[styles.releaseNotesText, { color: theme.text }]}
+                >
+                  {updateInfo.releaseNotes}
+                </ThemedText>
+              </ScrollView>
+            )}
+            {updateError && (
+              <ThemedText
+                type="small"
+                style={[styles.errorText, { color: Colors.dark.error }]}
+              >
+                {updateError}
+              </ThemedText>
+            )}
+            {downloadingApk && (
+              <View style={styles.progressContainer}>
+                <View
+                  style={[
+                    styles.progressBar,
+                    { backgroundColor: theme.backgroundSecondary },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.progressFill,
+                      {
+                        width: `${downloadProgress}%`,
+                        backgroundColor: theme.primary,
+                      },
+                    ]}
+                  />
+                </View>
+                <ThemedText
+                  type="small"
+                  style={[styles.progressText, { color: theme.textSecondary }]}
+                >
+                  Downloading... {downloadProgress}%
+                </ThemedText>
+              </View>
+            )}
+            {installingApk && (
+              <View style={styles.progressContainer}>
+                <ActivityIndicator size="large" color={theme.primary} />
+                <ThemedText
+                  type="small"
+                  style={[styles.progressText, { color: theme.textSecondary }]}
+                >
+                  Installing update...
+                </ThemedText>
+              </View>
+            )}
+            <View style={styles.confirmButtons}>
+              <Button
+                onPress={() => setShowUpdateModal(false)}
+                style={[
+                  styles.confirmButton,
+                  { backgroundColor: theme.backgroundSecondary },
+                ]}
+                textStyle={{ color: theme.text }}
+                disabled={downloadingApk || installingApk}
+                hasTVPreferredFocus={isTV}
+              >
+                Later
+              </Button>
+              <Button
+                onPress={handleDownloadAndInstall}
+                style={styles.confirmButton}
+                disabled={downloadingApk || installingApk}
+              >
+                {downloadingApk ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : installingApk ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  "Install"
+                )}
+              </Button>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
     </ThemedView>
   );
 }
@@ -1251,5 +1475,40 @@ const styles = StyleSheet.create({
   },
   confirmButton: {
     flex: 1,
+  },
+  releaseNotesContainer: {
+    maxHeight: 150,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  releaseNotesContent: {
+    paddingVertical: Spacing.xs,
+  },
+  releaseNotesText: {
+    lineHeight: 18,
+  },
+  errorText: {
+    textAlign: "center",
+    marginBottom: Spacing.md,
+    fontSize: 13,
+  },
+  progressContainer: {
+    alignItems: "center",
+    marginBottom: Spacing.md,
+  },
+  progressBar: {
+    width: "100%",
+    height: 6,
+    borderRadius: 3,
+    overflow: "hidden",
+    marginBottom: Spacing.xs,
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 3,
+  },
+  progressText: {
+    fontSize: 12,
   },
 });
