@@ -31,7 +31,7 @@ export function useResponsive(): ResponsiveValues {
       "change",
       ({ window }: { window: ScaledSize }) => {
         setDimensions({ width: window.width, height: window.height });
-      }
+      },
     );
 
     return () => subscription?.remove();

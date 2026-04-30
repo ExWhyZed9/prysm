@@ -81,15 +81,17 @@ export function Card({
       onBlur={() => setIsFocused(false)}
       focusable={!!onPress}
       accessibilityRole={onPress ? "button" : undefined}
-      style={[
-        styles.card,
-        {
-          backgroundColor: cardBackgroundColor,
-        },
-        isFocused && styles.cardFocused,
-        animatedStyle,
-        style,
-      ] as ViewStyle[]}
+      style={
+        [
+          styles.card,
+          {
+            backgroundColor: cardBackgroundColor,
+          },
+          isFocused && styles.cardFocused,
+          animatedStyle,
+          style,
+        ] as ViewStyle[]
+      }
     >
       {title ? (
         <ThemedText type="h4" style={styles.cardTitle}>

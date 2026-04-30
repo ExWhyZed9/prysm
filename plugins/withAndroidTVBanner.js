@@ -1,4 +1,7 @@
-const { withAndroidManifest, withDangerousMod } = require("expo/config-plugins");
+const {
+  withAndroidManifest,
+  withDangerousMod,
+} = require("expo/config-plugins");
 const fs = require("fs");
 const path = require("path");
 
@@ -12,7 +15,7 @@ function withAndroidTVBanner(config, props = {}) {
       application.$["android:banner"] = "@drawable/tv_banner";
 
       const mainActivity = application.activity?.find(
-        (a) => a.$["android:name"] === ".MainActivity"
+        (a) => a.$["android:name"] === ".MainActivity",
       );
       if (mainActivity) {
         if (!mainActivity["intent-filter"]) {
@@ -21,14 +24,19 @@ function withAndroidTVBanner(config, props = {}) {
         const hasLeanback = mainActivity["intent-filter"].some((filter) =>
           filter.category?.some(
             (cat) =>
-              cat.$["android:name"] === "android.intent.category.LEANBACK_LAUNCHER"
-          )
+              cat.$["android:name"] ===
+              "android.intent.category.LEANBACK_LAUNCHER",
+          ),
         );
         if (!hasLeanback) {
           mainActivity["intent-filter"].push({
             action: [{ $: { "android:name": "android.intent.action.MAIN" } }],
             category: [
-              { $: { "android:name": "android.intent.category.LEANBACK_LAUNCHER" } },
+              {
+                $: {
+                  "android:name": "android.intent.category.LEANBACK_LAUNCHER",
+                },
+              },
             ],
           });
         }
@@ -39,7 +47,7 @@ function withAndroidTVBanner(config, props = {}) {
       manifest["uses-feature"] = [];
     }
     const hasTouchscreen = manifest["uses-feature"].some(
-      (f) => f.$["android:name"] === "android.hardware.touchscreen"
+      (f) => f.$["android:name"] === "android.hardware.touchscreen",
     );
     if (!hasTouchscreen) {
       manifest["uses-feature"].push({
@@ -64,7 +72,7 @@ function withAndroidTVBanner(config, props = {}) {
         "src",
         "main",
         "res",
-        "drawable"
+        "drawable",
       );
 
       if (!fs.existsSync(drawableDir)) {

@@ -14,10 +14,10 @@ export function ThemedView({
   ...otherProps
 }: ThemedViewProps) {
   const { theme, isDark } = useTheme();
-  
+
   const backgroundColor = isDark
-    ? (darkColor || theme.backgroundRoot)
-    : (lightColor || theme.backgroundRoot);
+    ? darkColor || theme.backgroundRoot
+    : lightColor || theme.backgroundRoot;
 
   return <View style={[{ backgroundColor }, style]} {...otherProps} />;
 }

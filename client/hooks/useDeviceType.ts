@@ -11,15 +11,14 @@ interface DeviceTypeInfo {
 }
 
 export function useDeviceType(): DeviceTypeInfo {
-  const [deviceInfo, setDeviceInfo] = useState<DeviceTypeInfo>(() => getDeviceType());
+  const [deviceInfo, setDeviceInfo] = useState<DeviceTypeInfo>(() =>
+    getDeviceType(),
+  );
 
   useEffect(() => {
-    const subscription = Dimensions.addEventListener(
-      "change",
-      () => {
-        setDeviceInfo(getDeviceType());
-      }
-    );
+    const subscription = Dimensions.addEventListener("change", () => {
+      setDeviceInfo(getDeviceType());
+    });
 
     return () => subscription?.remove();
   }, []);
@@ -32,19 +31,20 @@ function getDeviceType(): DeviceTypeInfo {
   const screenSize = Math.max(width, height);
   const aspectRatio = Math.max(width, height) / Math.min(width, height);
 
-  const isTV = Platform.isTV || 
+  const isTV =
+    Platform.isTV ||
     (Platform.OS === "android" && Device.deviceType === Device.DeviceType.TV) ||
     (screenSize > 1200 && aspectRatio > 1.5 && aspectRatio < 2);
 
-  const isTablet = !isTV && (
-    Device.deviceType === Device.DeviceType.TABLET ||
-    (screenSize > 768 && screenSize <= 1200)
-  );
+  const isTablet =
+    !isTV &&
+    (Device.deviceType === Device.DeviceType.TABLET ||
+      (screenSize > 768 && screenSize <= 1200));
 
-  const isPhone = !isTV && !isTablet && (
-    Device.deviceType === Device.DeviceType.PHONE ||
-    screenSize <= 768
-  );
+  const isPhone =
+    !isTV &&
+    !isTablet &&
+    (Device.deviceType === Device.DeviceType.PHONE || screenSize <= 768);
 
   const isMobile = isPhone || isTablet;
 
@@ -69,8 +69,8 @@ function getDeviceType(): DeviceTypeInfo {
 }
 
 export function isAndroidTV(): boolean {
-  return Platform.OS === "android" && (
-    Platform.isTV ||
-    Device.deviceType === Device.DeviceType.TV
+  return (
+    Platform.OS === "android" &&
+    (Platform.isTV || Device.deviceType === Device.DeviceType.TV)
   );
 }

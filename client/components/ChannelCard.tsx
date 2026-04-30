@@ -96,10 +96,12 @@ function ChannelCardInner({
         onPress={handleFavorite}
         onFocus={() => setIsFavFocused(true)}
         onBlur={() => setIsFavFocused(false)}
-        style={[
-          styles.favoriteButton,
-          isFavFocused && styles.favoriteButtonFocused,
-        ] as ViewStyle[]}
+        style={
+          [
+            styles.favoriteButton,
+            isFavFocused && styles.favoriteButtonFocused,
+          ] as ViewStyle[]
+        }
         hitSlop={8}
         focusable={true}
         accessibilityLabel={
@@ -126,7 +128,7 @@ export const ChannelCard = React.memo(
     prev.isFavorite === next.isFavorite &&
     prev.themeBackground === next.themeBackground &&
     prev.onPress === next.onPress &&
-    prev.onFavoritePress === next.onFavoritePress
+    prev.onFavoritePress === next.onFavoritePress,
 );
 
 const styles = StyleSheet.create({

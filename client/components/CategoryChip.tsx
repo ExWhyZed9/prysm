@@ -1,5 +1,12 @@
 import React, { useState } from "react";
-import { StyleSheet, Pressable, View, useWindowDimensions, Platform, ViewStyle } from "react-native";
+import {
+  StyleSheet,
+  Pressable,
+  View,
+  useWindowDimensions,
+  Platform,
+  ViewStyle,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Animated, {
   useAnimatedStyle,
@@ -78,22 +85,30 @@ export function CategoryChip({
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
       focusable={true}
-      style={[
-        styles.chip,
-        isCompact && styles.chipCompact,
-        {
-          backgroundColor: isActive
-            ? Colors.dark.primary
-            : theme.backgroundSecondary,
-          borderColor: isFocused ? Colors.dark.primary : isActive ? Colors.dark.primary : isFavorite ? Colors.dark.primary + "60" : "transparent",
-        },
-        isFocused && {
-          borderWidth: 2,
-          backgroundColor: Colors.dark.primary + "30",
-          transform: [{ scale: 1.08 }],
-        },
-        animatedStyle,
-      ] as ViewStyle[]}
+      style={
+        [
+          styles.chip,
+          isCompact && styles.chipCompact,
+          {
+            backgroundColor: isActive
+              ? Colors.dark.primary
+              : theme.backgroundSecondary,
+            borderColor: isFocused
+              ? Colors.dark.primary
+              : isActive
+                ? Colors.dark.primary
+                : isFavorite
+                  ? Colors.dark.primary + "60"
+                  : "transparent",
+          },
+          isFocused && {
+            borderWidth: 2,
+            backgroundColor: Colors.dark.primary + "30",
+            transform: [{ scale: 1.08 }],
+          },
+          animatedStyle,
+        ] as ViewStyle[]
+      }
       testID={`category-chip-${label}`}
     >
       {isFavorite && !isActive ? (
@@ -139,7 +154,13 @@ export function CategoryChip({
           <Ionicons
             name={isFavorite ? "star" : "star-outline"}
             size={isCompact ? 12 : 14}
-            color={isFavorite ? Colors.dark.primary : isActive ? theme.buttonText : theme.textSecondary}
+            color={
+              isFavorite
+                ? Colors.dark.primary
+                : isActive
+                  ? theme.buttonText
+                  : theme.textSecondary
+            }
           />
         </Pressable>
       ) : null}

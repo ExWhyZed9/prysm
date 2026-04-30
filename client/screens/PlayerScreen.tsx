@@ -163,7 +163,8 @@ export default function PlayerScreen() {
   }, []);
 
   const getDRMConfig = useCallback((): DRMConfig | undefined => {
-    if (!channel?.drm || !channel.drm.type || !channel.drm.licenseServer) return undefined;
+    if (!channel?.drm || !channel.drm.type || !channel.drm.licenseServer)
+      return undefined;
 
     return {
       type: channel.drm.type,

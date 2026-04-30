@@ -1,5 +1,12 @@
 import React, { useState } from "react";
-import { StyleSheet, View, TextInput, Pressable, Platform, ViewStyle } from "react-native";
+import {
+  StyleSheet,
+  View,
+  TextInput,
+  Pressable,
+  Platform,
+  ViewStyle,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useTheme } from "@/hooks/useTheme";
@@ -67,10 +74,12 @@ export function SearchBar({
           focusable={true}
           accessibilityLabel="Clear search"
           accessibilityRole="button"
-          style={[
-            styles.clearButton,
-            isClearFocused && styles.clearButtonFocused,
-          ] as ViewStyle[]}
+          style={
+            [
+              styles.clearButton,
+              isClearFocused && styles.clearButtonFocused,
+            ] as ViewStyle[]
+          }
           testID="search-clear"
         >
           <Ionicons name="close" size={20} color={theme.textSecondary} />

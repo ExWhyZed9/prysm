@@ -18,7 +18,7 @@ export type ErrorFallbackProps = {
 
 export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
   const [isModalVisible, setIsModalVisible] = useState(false);
-  
+
   const theme = Colors.dark;
 
   const handleRestart = async () => {
@@ -59,7 +59,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
         <View style={styles.iconContainer}>
           <Ionicons name="prism" size={48} color={theme.primary} />
         </View>
-        
+
         <Text style={[styles.title, { color: theme.text }]}>
           Broadcast Interrupted
         </Text>
@@ -98,7 +98,12 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
           onRequestClose={() => setIsModalVisible(false)}
         >
           <View style={styles.modalOverlay}>
-            <View style={[styles.modalContainer, { backgroundColor: theme.backgroundRoot }]}>
+            <View
+              style={[
+                styles.modalContainer,
+                { backgroundColor: theme.backgroundRoot },
+              ]}
+            >
               <View style={styles.modalHeader}>
                 <Text style={[styles.modalTitle, { color: theme.text }]}>
                   Error Details

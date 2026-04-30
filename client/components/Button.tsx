@@ -1,5 +1,13 @@
 import React, { ReactNode, useState } from "react";
-import { StyleSheet, Pressable, ViewStyle, TextStyle, StyleProp, ActivityIndicator, Platform } from "react-native";
+import {
+  StyleSheet,
+  Pressable,
+  ViewStyle,
+  TextStyle,
+  StyleProp,
+  ActivityIndicator,
+  Platform,
+} from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -80,24 +88,28 @@ export function Button({
       focusable={!isDisabled}
       accessibilityRole="button"
       {...tvProps}
-      style={[
-        styles.button,
-        {
-          backgroundColor:
-            variant === "primary"
-              ? Colors.dark.primary
-              : Colors.dark.backgroundSecondary,
-          opacity: isDisabled ? 0.5 : 1,
-        },
-        isFocused && styles.buttonFocused,
-        style,
-        animatedStyle,
-      ] as ViewStyle[]}
+      style={
+        [
+          styles.button,
+          {
+            backgroundColor:
+              variant === "primary"
+                ? Colors.dark.primary
+                : Colors.dark.backgroundSecondary,
+            opacity: isDisabled ? 0.5 : 1,
+          },
+          isFocused && styles.buttonFocused,
+          style,
+          animatedStyle,
+        ] as ViewStyle[]
+      }
     >
       {loading ? (
         <ActivityIndicator
           size="small"
-          color={variant === "primary" ? Colors.dark.buttonText : Colors.dark.text}
+          color={
+            variant === "primary" ? Colors.dark.buttonText : Colors.dark.text
+          }
         />
       ) : (
         <ThemedText
@@ -106,7 +118,9 @@ export function Button({
             styles.buttonText,
             {
               color:
-                variant === "primary" ? Colors.dark.buttonText : Colors.dark.text,
+                variant === "primary"
+                  ? Colors.dark.buttonText
+                  : Colors.dark.text,
             },
             textStyle,
           ]}

@@ -93,26 +93,33 @@ function parseDRM(
  * Parses VLC-style URL headers (e.g., `http://stream.url|User-Agent:foo|Referer:bar`)
  * Returns the clean URL and a headers record.
  */
-function parseUrlHeaders(url: string): { cleanUrl: string; headers: Record<string, string> } {
+function parseUrlHeaders(url: string): {
+  cleanUrl: string;
+  headers: Record<string, string>;
+} {
   const headers: Record<string, string> = {};
   let cleanUrl = url;
 
-  const pipeIndex = url.indexOf('|');
+  const pipeIndex = url.indexOf("|");
   if (pipeIndex !== -1) {
     cleanUrl = url.substring(0, pipeIndex);
     const headerPart = url.substring(pipeIndex + 1);
-    const headerEntries = headerPart.split('|');
+    const headerEntries = headerPart.split("|");
     for (const entry of headerEntries) {
-      const colonIndex = entry.indexOf(':');
+      const colonIndex = entry.indexOf(":");
       if (colonIndex !== -1) {
         const headerName = entry.substring(0, colonIndex).trim();
         const headerValue = entry.substring(colonIndex + 1).trim();
         if (headerName && headerValue) {
           // Normalize common header names
-          const normalized = headerName.toLowerCase() === 'user-agent' ? 'User-Agent'
-            : headerName.toLowerCase() === 'referer' ? 'Referer'
-            : headerName.toLowerCase() === 'origin' ? 'Origin'
-            : headerName;
+          const normalized =
+            headerName.toLowerCase() === "user-agent"
+              ? "User-Agent"
+              : headerName.toLowerCase() === "referer"
+                ? "Referer"
+                : headerName.toLowerCase() === "origin"
+                  ? "Origin"
+                  : headerName;
           headers[normalized] = headerValue;
         }
       }
@@ -186,8 +193,13 @@ export function parseM3U(
 
       // Merge headers from all sources (priority: URL syntax > EXTVLCOPT > EXTINF attributes)
       const extinfHeaders = currentChannel.headers || {};
-      const mergedHeaders = { ...extinfHeaders, ...(drmHeaders || {}), ...urlHeaders };
-      const finalHeaders = Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined;
+      const mergedHeaders = {
+        ...extinfHeaders,
+        ...(drmHeaders || {}),
+        ...urlHeaders,
+      };
+      const finalHeaders =
+        Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined;
 
       const channel: Channel = {
         id: stableChannelId(cleanUrl),
@@ -225,7 +237,8 @@ export function parseM3U(
   };
 }
 
-export const PRYSM_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+export const PRYSM_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 async function fetchPlaylistContent(url: string): Promise<string | null> {
   try {
@@ -282,7 +295,10 @@ export async function fetchAndParseM3U(
  * Title1=Channel 1
  * Length1=-1
  */
-export function parsePLS(content: string, playlistName: string = "My Playlist"): Playlist {
+export function parsePLS(
+  content: string,
+  playlistName: string = "My Playlist",
+): Playlist {
   const lines = content.split("\n").map((line) => line.trim());
   const channels: Channel[] = [];
   const categoriesSet = new Set<string>();
@@ -361,7 +377,10 @@ export function parsePLS(content: string, playlistName: string = "My Playlist"):
  *   </trackList>
  * </playlist>
  */
-export function parseXSPF(content: string, playlistName: string = "My Playlist"): Playlist {
+export function parseXSPF(
+  content: string,
+  playlistName: string = "My Playlist",
+): Playlist {
   const channels: Channel[] = [];
   const categoriesSet = new Set<string>();
 
@@ -376,7 +395,9 @@ export function parseXSPF(content: string, playlistName: string = "My Playlist")
     const locationMatch = trackContent.match(/<location>([^<]*)<\/location>/i);
     const imageMatch = trackContent.match(/<image>([^<]*)<\/image>/i);
     const creatorMatch = trackContent.match(/<creator>([^<]*)<\/creator>/i);
-    const annotationMatch = trackContent.match(/<annotation>([^<]*)<\/annotation>/i);
+    const annotationMatch = trackContent.match(
+      /<annotation>([^<]*)<\/annotation>/i,
+    );
 
     if (locationMatch) {
       const url = locationMatch[1].trim();
@@ -423,7 +444,10 @@ export function parseXSPF(content: string, playlistName: string = "My Playlist")
 /**
  * Detects playlist format and parses accordingly
  */
-export function parsePlaylist(content: string, playlistName: string = "My Playlist"): Playlist {
+export function parsePlaylist(
+  content: string,
+  playlistName: string = "My Playlist",
+): Playlist {
   const trimmed = content.trim();
 
   // Check for M3U/M3U8
@@ -432,7 +456,10 @@ export function parsePlaylist(content: string, playlistName: string = "My Playli
   }
 
   // Check for PLS
-  if (trimmed.toLowerCase().includes("[playlist]") || trimmed.toLowerCase().includes("numberofentries=")) {
+  if (
+    trimmed.toLowerCase().includes("[playlist]") ||
+    trimmed.toLowerCase().includes("numberofentries=")
+  ) {
     return parsePLS(content, playlistName);
   }
 
@@ -454,14 +481,19 @@ export function parsePlaylist(content: string, playlistName: string = "My Playli
     // Not JSON
   }
 
-  throw new Error("Unsupported playlist format. Supported formats: M3U, M3U8, PLS, XSPF, JSON");
+  throw new Error(
+    "Unsupported playlist format. Supported formats: M3U, M3U8, PLS, XSPF, JSON",
+  );
 }
 
 /**
  * Parses a JSON array of channels
  * Expected format: [{ name, url, logo?, group? }, ...]
  */
-function parseJSONArray(items: any[], playlistName: string = "My Playlist"): Playlist {
+function parseJSONArray(
+  items: any[],
+  playlistName: string = "My Playlist",
+): Playlist {
   const channels: Channel[] = [];
   const categoriesSet = new Set<string>();
 
@@ -506,7 +538,10 @@ function parseJSONArray(items: any[], playlistName: string = "My Playlist"): Pla
 /**
  * Fetches and parses any playlist format
  */
-export async function fetchAndParsePlaylist(url: string, customName?: string): Promise<Playlist> {
+export async function fetchAndParsePlaylist(
+  url: string,
+  customName?: string,
+): Promise<Playlist> {
   const response = await fetch(url, {
     headers: {
       "User-Agent": PRYSM_USER_AGENT,
@@ -522,8 +557,13 @@ export async function fetchAndParsePlaylist(url: string, customName?: string): P
 
   const content = await response.text();
 
-  if (!content || (!content.includes("#EXTM3U") && !content.includes("#EXTINF"))) {
-    throw new Error("Unsupported playlist format. Supported formats: M3U, M3U8, PLS, XSPF, JSON");
+  if (
+    !content ||
+    (!content.includes("#EXTM3U") && !content.includes("#EXTINF"))
+  ) {
+    throw new Error(
+      "Unsupported playlist format. Supported formats: M3U, M3U8, PLS, XSPF, JSON",
+    );
   }
 
   const urlParts = url.split("/");
@@ -537,6 +577,8 @@ export async function fetchAndParsePlaylist(url: string, customName?: string): P
     playlist.url = url;
     return playlist;
   } catch (parseError: any) {
-    throw new Error(`Failed to parse playlist: ${parseError.message || "Unknown parsing error"}`);
+    throw new Error(
+      `Failed to parse playlist: ${parseError.message || "Unknown parsing error"}`,
+    );
   }
 }

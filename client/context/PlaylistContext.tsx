@@ -11,7 +11,12 @@ import React, {
 import { AppState, AppStateStatus } from "react-native";
 import { Channel, Playlist } from "@/types/playlist";
 import * as storage from "@/lib/storage";
-import { parseM3U, fetchAndParseM3U, parsePlaylist, fetchAndParsePlaylist } from "@/lib/m3u-parser";
+import {
+  parseM3U,
+  fetchAndParseM3U,
+  parsePlaylist,
+  fetchAndParsePlaylist,
+} from "@/lib/m3u-parser";
 import { syncFavourites } from "@/lib/tv-channel";
 
 interface PlaylistContextType {

@@ -541,7 +541,10 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
       }
     };
 
-    const subscription = AppState.addEventListener("change", handleAppStateChange);
+    const subscription = AppState.addEventListener(
+      "change",
+      handleAppStateChange,
+    );
     return () => subscription.remove();
   }, [isPlaying, title, subtitle, poster]);
 
@@ -1308,12 +1311,19 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                       ]}
                     >
                       <View
-                        style={[st.seekBarFill, { width: `${(seekDrag.active ? seekDrag.progress : progress) * 100}%` }]}
+                        style={[
+                          st.seekBarFill,
+                          {
+                            width: `${(seekDrag.active ? seekDrag.progress : progress) * 100}%`,
+                          },
+                        ]}
                       />
                       <View
                         style={[
                           st.seekThumb,
-                          { left: `${(seekDrag.active ? seekDrag.progress : progress) * 100}%` },
+                          {
+                            left: `${(seekDrag.active ? seekDrag.progress : progress) * 100}%`,
+                          },
                           seekBarFocused && st.seekThumbFocused,
                         ]}
                       />

@@ -19,7 +19,7 @@ export function useOrientation(): OrientationInfo {
       "change",
       ({ window }: { window: ScaledSize }) => {
         setDimensions(window);
-      }
+      },
     );
 
     return () => subscription?.remove();

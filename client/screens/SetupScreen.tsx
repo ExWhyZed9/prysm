@@ -132,7 +132,9 @@ export default function SetupScreen() {
 
       const file = result.assets[0];
       if (!playlistName.trim()) {
-        setPlaylistName(file.name.replace(/\.(m3u8?|pls|xspf|json)$/i, "") || "");
+        setPlaylistName(
+          file.name.replace(/\.(m3u8?|pls|xspf|json)$/i, "") || "",
+        );
       }
 
       setLoadingType("file");

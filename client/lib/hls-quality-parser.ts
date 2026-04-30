@@ -7,11 +7,13 @@ interface HLSVariant {
   name?: string;
 }
 
-export async function parseHLSQualities(masterPlaylistUrl: string): Promise<VideoQuality[]> {
+export async function parseHLSQualities(
+  masterPlaylistUrl: string,
+): Promise<VideoQuality[]> {
   try {
     const response = await fetch(masterPlaylistUrl, {
       headers: {
-        "Accept": "*/*",
+        Accept: "*/*",
       },
     });
 
@@ -36,7 +38,9 @@ function parseHLSManifest(content: string, baseUrl: string): VideoQuality[] {
     const line = lines[i];
 
     if (line.startsWith("#EXT-X-STREAM-INF:")) {
-      const attributes = parseAttributes(line.substring("#EXT-X-STREAM-INF:".length));
+      const attributes = parseAttributes(
+        line.substring("#EXT-X-STREAM-INF:".length),
+      );
       const urlLine = lines[i + 1];
 
       if (urlLine && !urlLine.startsWith("#")) {
@@ -125,7 +129,11 @@ function parseHLSManifest(content: string, baseUrl: string): VideoQuality[] {
     const exists = acc.find((q) => q.resolution === quality.resolution);
     if (!exists) {
       acc.push(quality);
-    } else if (quality.bitrate && exists.bitrate && quality.bitrate > exists.bitrate) {
+    } else if (
+      quality.bitrate &&
+      exists.bitrate &&
+      quality.bitrate > exists.bitrate
+    ) {
       const index = acc.indexOf(exists);
       acc[index] = quality;
     }
@@ -162,7 +170,10 @@ function resolveUrl(url: string, baseUrl: string): string {
     if (url.startsWith("/")) {
       return `${base.protocol}//${base.host}${url}`;
     } else {
-      const basePath = base.pathname.substring(0, base.pathname.lastIndexOf("/") + 1);
+      const basePath = base.pathname.substring(
+        0,
+        base.pathname.lastIndexOf("/") + 1,
+      );
       return `${base.protocol}//${base.host}${basePath}${url}`;
     }
   } catch {
@@ -172,5 +183,9 @@ function resolveUrl(url: string, baseUrl: string): string {
 
 export function isHLSStream(url: string): boolean {
   const lowerUrl = url.toLowerCase();
-  return lowerUrl.includes(".m3u8") || lowerUrl.includes("/hls/") || lowerUrl.includes("playlist");
+  return (
+    lowerUrl.includes(".m3u8") ||
+    lowerUrl.includes("/hls/") ||
+    lowerUrl.includes("playlist")
+  );
 }

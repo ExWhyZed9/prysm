@@ -1,5 +1,12 @@
 import React, { useState } from "react";
-import { StyleSheet, View, Pressable, Switch, Platform, ViewStyle } from "react-native";
+import {
+  StyleSheet,
+  View,
+  Pressable,
+  Switch,
+  Platform,
+  ViewStyle,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
@@ -65,7 +72,13 @@ export function SettingsRow({
           type="body"
           style={[
             styles.title,
-            { color: destructive ? Colors.dark.error : isFocused ? "#FFFFFF" : theme.text },
+            {
+              color: destructive
+                ? Colors.dark.error
+                : isFocused
+                  ? "#FFFFFF"
+                  : theme.text,
+            },
           ]}
           numberOfLines={1}
         >
@@ -74,7 +87,10 @@ export function SettingsRow({
         {subtitle ? (
           <ThemedText
             type="small"
-            style={[styles.subtitle, { color: isFocused ? Colors.dark.primary : theme.textSecondary }]}
+            style={[
+              styles.subtitle,
+              { color: isFocused ? Colors.dark.primary : theme.textSecondary },
+            ]}
             numberOfLines={2}
           >
             {subtitle}
@@ -96,7 +112,10 @@ export function SettingsRow({
       {value ? (
         <ThemedText
           type="small"
-          style={[styles.value, { color: isFocused ? "#FFFFFF" : theme.textSecondary }]}
+          style={[
+            styles.value,
+            { color: isFocused ? "#FFFFFF" : theme.textSecondary },
+          ]}
           numberOfLines={1}
         >
           {value}
@@ -117,18 +136,27 @@ export function SettingsRow({
   if (onPress || isToggle) {
     return (
       <Pressable
-        onPress={disabled ? undefined : (onPress || (isToggle ? () => onToggle?.(!toggleValue) : undefined))}
+        onPress={
+          disabled
+            ? undefined
+            : onPress || (isToggle ? () => onToggle?.(!toggleValue) : undefined)
+        }
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
         focusable={true}
         accessibilityRole="button"
         accessibilityLabel={title}
         disabled={disabled}
-        style={[
-          styles.pressable,
-          { backgroundColor: theme.backgroundDefault, opacity: disabled ? 0.5 : 1 },
-          isFocused && styles.pressableFocused,
-        ] as ViewStyle[]}
+        style={
+          [
+            styles.pressable,
+            {
+              backgroundColor: theme.backgroundDefault,
+              opacity: disabled ? 0.5 : 1,
+            },
+            isFocused && styles.pressableFocused,
+          ] as ViewStyle[]
+        }
         testID={`settings-row-${title.toLowerCase().replace(/\s/g, "-")}`}
       >
         {content}
