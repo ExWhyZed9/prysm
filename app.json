@@ -2,7 +2,7 @@
   "expo": {
     "name": "Prysm",
     "slug": "prysm",
-    "version": "1.2.2",
+    "version": "1.3.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "prysmplayer",
