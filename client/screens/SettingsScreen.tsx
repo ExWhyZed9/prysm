@@ -11,6 +11,7 @@ import {
   ViewStyle,
   ActivityIndicator,
   Linking,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -316,6 +317,9 @@ export default function SettingsScreen() {
       const info = await checkForUpdate();
       if (info) {
         setUpdateInfo(info);
+        if (!info.available) {
+          Alert.alert("Up to Date", "You are already on the latest version.");
+        }
       } else {
         setUpdateError("Unable to check for updates");
       }
