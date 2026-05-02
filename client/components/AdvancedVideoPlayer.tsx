@@ -730,11 +730,12 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   // Hide controls before entering PiP so the title/controls don't flash
   // in the PiP window during the transition.
   const handleEnterPip = useCallback(() => {
+    if (!isPlaying) return;
     if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     cancelHideTimerRef.current();
     setShowControls(false);
     TvPlayerCommands.enterPip(tvPlayerRef);
-  }, []);
+  }, [isPlaying]);
 
   // ── Channel navigation ────────────────────────────────────────────────────
   // Stop background audio before switching channels so the old stream doesn't
