@@ -10,6 +10,7 @@ import {
   Platform,
   ViewStyle,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -595,6 +596,8 @@ export default function SettingsScreen() {
                 title="Developer"
                 subtitle="ExWhyZed9"
                 value=""
+                onPress={() => Linking.openURL("https://github.com/ExWhyZed9")}
+                showChevron
               />
               {updateInfo?.available ? (
                 <SettingsRow
