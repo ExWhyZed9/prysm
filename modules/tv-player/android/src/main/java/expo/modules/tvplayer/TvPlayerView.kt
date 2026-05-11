@@ -215,7 +215,7 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
                 .setAspectRatio(Rational(ratio.numerator, ratio.denominator))
                 .apply {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        setAutoEnterEnabled(true)
+                        setAutoEnterEnabled(false)
                         setSeamlessResizeEnabled(true)
                     }
                 }

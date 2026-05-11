@@ -145,29 +145,16 @@ function withTvPlayer(config) {
         }
       }
 
-      // --- Add PiP methods before the final closing brace of the class ---
+      // --- Replace onUserLeaveHint to NOT auto-enter PiP ---
+      // Only enter PiP when the user explicitly taps the PiP button.
       const pipMethods = `
     /**
-     * Auto-enter PiP when the user presses Home while the player is active.
-     * PipRegistry is set by TvPlayerView when a source is loaded on mobile.
+     * Do NOT auto-enter PiP when the user presses Home.
+     * PiP should only be entered via the explicit PiP button in the player controls.
      */
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && PipRegistry.isPlayerActive) {
-            try {
-                val ratio = PipRegistry.aspectRatio
-                val params = PictureInPictureParams.Builder()
-                    .setAspectRatio(Rational(ratio.numerator, ratio.denominator))
-                    .apply {
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                            setAutoEnterEnabled(true)
-                            setSeamlessResizeEnabled(true)
-                        }
-                    }
-                    .build()
-                enterPictureInPictureMode(params)
-            } catch (_: Exception) {}
-        }
+        // Intentionally left empty — PiP is triggered only by user action via TvPlayerView.enterPip()
     }
 
     override fun onPictureInPictureModeChanged(

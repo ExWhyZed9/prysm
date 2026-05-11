@@ -509,8 +509,8 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     };
   }, []);
 
-  // Auto-enter PiP on mobile / background audio on TV when app goes to background.
-  // On reopen, ensure video is reattached and playing.
+  // Handle app state changes — background audio on TV only.
+  // Mobile PiP is triggered only by explicit user action (PiP button), not on app background.
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (nextAppState === "background" || nextAppState === "inactive") {
@@ -524,14 +524,8 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
               artworkUri: poster,
             });
           }
-        } else if (Platform.OS === "android") {
-          // Mobile: auto-enter PiP when minimizing
-          if (isPlaying && !isInPiPRef.current) {
-            cancelHideTimerRef.current();
-            setShowControls(false);
-            TvPlayerCommands.enterPip(tvPlayerRef);
-          }
         }
+        // Mobile: do NOT auto-enter PiP — user must tap the PiP button explicitly
       } else if (nextAppState === "active") {
         // App came back to foreground
         if (isTV && isBackgroundPlayingRef.current) {
