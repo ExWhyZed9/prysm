@@ -369,6 +369,36 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
 
     // ── Internal ──────────────────────────────────────────────────────────────
 
+    /**
+     * Infer MIME type from URL to help ExoPlayer pick the correct extractor.
+     * NextPVR and other TV backends often serve MPEG-TS without proper
+     * Content-Type headers, causing ExoPlayer's auto-detection to fail with
+     * UnrecognizedInputFormatException.
+     */
+    private fun getStreamMimeType(url: String): String? {
+        val lower = url.lowercase().split("?")[0]
+        return when {
+            lower.endsWith(".m3u8") || lower.endsWith(".m3u") ->
+                androidx.media3.common.util.MimeTypes.APPLICATION_M3U8
+            lower.endsWith(".ts") ->
+                androidx.media3.common.util.MimeTypes.VIDEO_MP2T
+            lower.endsWith(".mpd") ->
+                androidx.media3.common.util.MimeTypes.APPLICATION_MPD
+            lower.endsWith(".mp4") || lower.endsWith(".m4s") ->
+                androidx.media3.common.util.MimeTypes.VIDEO_MP4
+            lower.endsWith(".aac") ->
+                androidx.media3.common.util.MimeTypes.AUDIO_AAC
+            lower.endsWith(".mp3") ->
+                androidx.media3.common.util.MimeTypes.AUDIO_MPEG
+            // NextPVR live TV/radio streams without extension are typically MPEG-TS
+            lower.contains("/service?method=channel.stream") ||
+            lower.contains("/live/") ||
+            lower.contains("/stream/") ->
+                androidx.media3.common.util.MimeTypes.VIDEO_MP2T
+            else -> null
+        }
+    }
+
     private fun startPoller() {
         mainHandler.removeCallbacks(positionPoller)
         mainHandler.post(positionPoller)
@@ -389,6 +419,7 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
         val okHttpClient = OkHttpClient.Builder()
             .addInterceptor { chain ->
                 val req = chain.request().newBuilder()
+                    .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
                 headers.forEach { (k, v) -> req.addHeader(k, v) }
                 chain.proceed(req.build())
             }
@@ -422,8 +453,10 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
                     .setAllowAudioMixedMimeTypeAdaptiveness(true)
                     .setAllowAudioMixedChannelCountAdaptiveness(true)
                     .setAllowAudioMixedDecoderSupportAdaptiveness(true)
+                    .setAllowVideoMixedMimeTypeAdaptiveness(true)
                     // Force audio track selection even for audio-only streams
                     .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                    .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
                     .build()
             )
         }
@@ -449,7 +482,9 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
         player.addListener(playerListener)
         player.addListener(subtitleListener)
 
-        val mediaItemBuilder = MediaItem.Builder().setUri(Uri.parse(url))
+        val mediaItemBuilder = MediaItem.Builder()
+            .setUri(Uri.parse(url))
+            .setMimeType(getStreamMimeType(url))
         if (!drmType.isNullOrEmpty() && !drmLicenseUrl.isNullOrEmpty()) {
             val uuid = when (drmType.lowercase()) {
                 "widevine"  -> C.WIDEVINE_UUID
