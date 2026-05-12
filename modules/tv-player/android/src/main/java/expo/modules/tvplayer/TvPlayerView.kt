@@ -25,6 +25,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.util.MimeTypes
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -378,23 +379,15 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
     private fun getStreamMimeType(url: String): String? {
         val lower = url.lowercase().split("?")[0]
         return when {
-            lower.endsWith(".m3u8") || lower.endsWith(".m3u") ->
-                androidx.media3.common.util.MimeTypes.APPLICATION_M3U8
-            lower.endsWith(".ts") ->
-                androidx.media3.common.util.MimeTypes.VIDEO_MP2T
-            lower.endsWith(".mpd") ->
-                androidx.media3.common.util.MimeTypes.APPLICATION_MPD
-            lower.endsWith(".mp4") || lower.endsWith(".m4s") ->
-                androidx.media3.common.util.MimeTypes.VIDEO_MP4
-            lower.endsWith(".aac") ->
-                androidx.media3.common.util.MimeTypes.AUDIO_AAC
-            lower.endsWith(".mp3") ->
-                androidx.media3.common.util.MimeTypes.AUDIO_MPEG
-            // NextPVR live TV/radio streams without extension are typically MPEG-TS
+            lower.endsWith(".m3u8") || lower.endsWith(".m3u") -> MimeTypes.APPLICATION_M3U8
+            lower.endsWith(".ts") -> MimeTypes.VIDEO_MP2T
+            lower.endsWith(".mpd") -> MimeTypes.APPLICATION_MPD
+            lower.endsWith(".mp4") || lower.endsWith(".m4s") -> MimeTypes.VIDEO_MP4
+            lower.endsWith(".aac") -> MimeTypes.AUDIO_AAC
+            lower.endsWith(".mp3") -> MimeTypes.AUDIO_MPEG
             lower.contains("/service?method=channel.stream") ||
             lower.contains("/live/") ||
-            lower.contains("/stream/") ->
-                androidx.media3.common.util.MimeTypes.VIDEO_MP2T
+            lower.contains("/stream/") -> MimeTypes.VIDEO_MP2T
             else -> null
         }
     }
