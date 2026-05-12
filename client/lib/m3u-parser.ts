@@ -1,4 +1,5 @@
 import { Channel, Playlist, DRMInfo } from "@/types/playlist";
+import { fetchPlaylistNative } from "../../modules/tv-player/src/index";
 
 function generateId(): string {
   return (
@@ -242,15 +243,11 @@ export const PRYSM_USER_AGENT =
 
 async function fetchPlaylistContent(url: string): Promise<string | null> {
   try {
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": PRYSM_USER_AGENT,
-        Accept: "*/*",
-      },
-    });
-
-    if (response.ok) {
-      const content = await response.text();
+    // Use native OkHttp fetch which properly handles User-Agent headers
+    // (RN fetch on Android ignores custom User-Agent)
+    const result = await fetchPlaylistNative(url);
+    if (result.success) {
+      const content = result.content;
       if (content.includes("#EXTM3U") || content.includes("#EXTINF")) {
         return content;
       }
@@ -542,20 +539,16 @@ export async function fetchAndParsePlaylist(
   url: string,
   customName?: string,
 ): Promise<Playlist> {
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent": PRYSM_USER_AGENT,
-      Accept: "*/*",
-    },
-  });
+  // Use native OkHttp fetch which properly handles User-Agent headers
+  const result = await fetchPlaylistNative(url);
 
-  if (!response.ok) {
+  if (!result.success) {
     throw new Error(
-      "Could not fetch playlist. The server may be blocking requests or require specific app authentication.",
+      `Could not fetch playlist: ${result.error || "The server may be blocking requests or require specific app authentication."}`,
     );
   }
 
-  const content = await response.text();
+  const content = result.content;
 
   if (
     !content ||

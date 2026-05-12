@@ -1,4 +1,8 @@
-import { requireNativeViewManager, Platform } from "expo-modules-core";
+import {
+  requireNativeViewManager,
+  requireOptionalNativeModule,
+  Platform,
+} from "expo-modules-core";
 import React from "react";
 import { ViewStyle } from "react-native";
 
@@ -67,6 +71,18 @@ export interface TvPlayerViewProps {
 
 const NativeTvPlayerView =
   Platform.OS === "android" ? requireNativeViewManager("TvPlayer") : null;
+
+// Module-level functions (not tied to a view instance)
+const TvPlayerModule =
+  Platform.OS === "android"
+    ? requireOptionalNativeModule<{
+        fetchPlaylist(url: string): Promise<{
+          success: boolean;
+          error: string;
+          content: string;
+        }>;
+      }>("TvPlayer")
+    : null;
 
 // ── Imperative commands ───────────────────────────────────────────────────────
 // AsyncFunction definitions inside the View block are automatically attached
@@ -161,3 +177,22 @@ export const TvPlayerView = React.forwardRef<any, TvPlayerViewProps>(
 );
 
 TvPlayerView.displayName = "TvPlayerView";
+
+// ── Module-level functions ────────────────────────────────────────────────────
+
+/**
+ * Fetches playlist content using native OkHttp (bypasses RN fetch limitations
+ * with User-Agent headers on Android). Returns { success, error, content }.
+ */
+export async function fetchPlaylistNative(
+  url: string,
+): Promise<{ success: boolean; error: string; content: string }> {
+  if (!TvPlayerModule) {
+    return {
+      success: false,
+      error: "Native module not available",
+      content: "",
+    };
+  }
+  return TvPlayerModule.fetchPlaylist(url);
+}
