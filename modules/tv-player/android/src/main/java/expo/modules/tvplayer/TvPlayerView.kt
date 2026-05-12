@@ -454,9 +454,6 @@ class TvPlayerView(context: Context, appContext: AppContext) : ExpoView(context,
                     .setAllowAudioMixedChannelCountAdaptiveness(true)
                     .setAllowAudioMixedDecoderSupportAdaptiveness(true)
                     .setAllowVideoMixedMimeTypeAdaptiveness(true)
-                    // Force audio track selection even for audio-only streams
-                    .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
-                    .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
                     .build()
             )
         }

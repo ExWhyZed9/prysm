@@ -1088,40 +1088,6 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                   />
                 </TVFocusablePressable>
               ) : null}
-
-              {/* PiP — mobile only */}
-              {!isTV && Platform.OS === "android" ? (
-                <TVFocusablePressable
-                  onPress={handleEnterPip}
-                  baseStyle={st.iconBtn}
-                  focusedStyle={st.iconBtnFocused}
-                  focusable={showControls}
-                  accessibilityLabel="Picture in picture"
-                >
-                  <Ionicons
-                    name="browsers-outline"
-                    size={playerControls.icon}
-                    color="#fff"
-                  />
-                </TVFocusablePressable>
-              ) : null}
-
-              {/* Lock */}
-              {!isTV ? (
-                <TVFocusablePressable
-                  onPress={() => setIsLocked(true)}
-                  baseStyle={st.iconBtn}
-                  focusedStyle={st.iconBtnFocused}
-                  focusable={showControls}
-                  accessibilityLabel="Lock controls"
-                >
-                  <Ionicons
-                    name="lock-open-outline"
-                    size={playerControls.icon}
-                    color="#fff"
-                  />
-                </TVFocusablePressable>
-              ) : null}
             </View>
           </View>
 
@@ -1374,48 +1340,9 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 ) : null}
               </View>
 
-              {/* Right tool buttons */}
+              {/* Right tool buttons — YouTube-style order */}
               <View style={st.bottomRight}>
-                {/* Background audio */}
-                <TVFocusablePressable
-                  onPress={handleBackgroundToggle}
-                  baseStyle={[
-                    st.toolBtn,
-                    isBackgroundPlaying && st.toolBtnActive,
-                  ]}
-                  focusedStyle={st.toolBtnFocused}
-                  focusable={showControls}
-                  accessibilityLabel={
-                    isBackgroundPlaying
-                      ? "Disable background audio"
-                      : "Enable background audio"
-                  }
-                  viewRef={firstToolBtnRef}
-                  nextFocusUp={nh.seekBar ?? nh.playPause}
-                >
-                  <Ionicons
-                    name={
-                      isBackgroundPlaying
-                        ? "musical-notes"
-                        : "musical-notes-outline"
-                    }
-                    size={20}
-                    color={isBackgroundPlaying ? Colors.dark.primary : "#fff"}
-                  />
-                </TVFocusablePressable>
-
-                {/* Aspect ratio */}
-                <TVFocusablePressable
-                  onPress={() => setShowAspectModal(true)}
-                  baseStyle={st.toolBtn}
-                  focusedStyle={st.toolBtnFocused}
-                  focusable={showControls}
-                  accessibilityLabel="Aspect ratio"
-                >
-                  <Ionicons name="scan-outline" size={20} color="#fff" />
-                </TVFocusablePressable>
-
-                {/* Subtitles */}
+                {/* Subtitles (CC) */}
                 {subtitleTracks.length > 0 ? (
                   <TVFocusablePressable
                     onPress={() => setShowSubtitleModal(true)}
@@ -1479,6 +1406,75 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 >
                   <Ionicons name="settings-outline" size={20} color="#fff" />
                 </TVFocusablePressable>
+
+                {/* Aspect ratio */}
+                <TVFocusablePressable
+                  onPress={() => setShowAspectModal(true)}
+                  baseStyle={st.toolBtn}
+                  focusedStyle={st.toolBtnFocused}
+                  focusable={showControls}
+                  accessibilityLabel="Aspect ratio"
+                >
+                  <Ionicons name="scan-outline" size={20} color="#fff" />
+                </TVFocusablePressable>
+
+                {/* Background audio */}
+                <TVFocusablePressable
+                  onPress={handleBackgroundToggle}
+                  baseStyle={[
+                    st.toolBtn,
+                    isBackgroundPlaying && st.toolBtnActive,
+                  ]}
+                  focusedStyle={st.toolBtnFocused}
+                  focusable={showControls}
+                  accessibilityLabel={
+                    isBackgroundPlaying
+                      ? "Disable background audio"
+                      : "Enable background audio"
+                  }
+                  viewRef={firstToolBtnRef}
+                  nextFocusUp={nh.seekBar ?? nh.playPause}
+                >
+                  <Ionicons
+                    name={
+                      isBackgroundPlaying
+                        ? "musical-notes"
+                        : "musical-notes-outline"
+                    }
+                    size={20}
+                    color={isBackgroundPlaying ? Colors.dark.primary : "#fff"}
+                  />
+                </TVFocusablePressable>
+
+                {/* PiP — mobile only */}
+                {!isTV && Platform.OS === "android" ? (
+                  <TVFocusablePressable
+                    onPress={handleEnterPip}
+                    baseStyle={st.toolBtn}
+                    focusedStyle={st.toolBtnFocused}
+                    focusable={showControls}
+                    accessibilityLabel="Picture in picture"
+                  >
+                    <Ionicons name="browsers-outline" size={20} color="#fff" />
+                  </TVFocusablePressable>
+                ) : null}
+
+                {/* Lock — mobile only */}
+                {!isTV ? (
+                  <TVFocusablePressable
+                    onPress={() => setIsLocked(true)}
+                    baseStyle={st.toolBtn}
+                    focusedStyle={st.toolBtnFocused}
+                    focusable={showControls}
+                    accessibilityLabel="Lock controls"
+                  >
+                    <Ionicons
+                      name="lock-closed-outline"
+                      size={20}
+                      color="#fff"
+                    />
+                  </TVFocusablePressable>
+                ) : null}
               </View>
             </View>
           </View>
