@@ -243,8 +243,7 @@ export const PRYSM_USER_AGENT =
 
 async function fetchPlaylistContent(url: string): Promise<string | null> {
   try {
-    // Use native OkHttp fetch which properly handles User-Agent headers
-    // (RN fetch on Android ignores custom User-Agent)
+    // Try native OkHttp fetch first (properly handles User-Agent on Android)
     const result = await fetchPlaylistNative(url);
     if (result.success) {
       const content = result.content;
@@ -252,8 +251,26 @@ async function fetchPlaylistContent(url: string): Promise<string | null> {
         return content;
       }
     }
-  } catch (e) {
-    // Fetch failed
+  } catch {
+    // Native fetch unavailable or failed, fall through to JS fetch
+  }
+
+  // Fallback: JS fetch (may strip User-Agent on some RN versions)
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": PRYSM_USER_AGENT,
+        Accept: "*/*",
+      },
+    });
+    if (response.ok) {
+      const content = await response.text();
+      if (content.includes("#EXTM3U") || content.includes("#EXTINF")) {
+        return content;
+      }
+    }
+  } catch {
+    // Both fetch methods failed
   }
   return null;
 }
@@ -539,16 +556,35 @@ export async function fetchAndParsePlaylist(
   url: string,
   customName?: string,
 ): Promise<Playlist> {
-  // Use native OkHttp fetch which properly handles User-Agent headers
-  const result = await fetchPlaylistNative(url);
+  let content: string | null = null;
 
-  if (!result.success) {
-    throw new Error(
-      `Could not fetch playlist: ${result.error || "The server may be blocking requests or require specific app authentication."}`,
-    );
+  // Try native OkHttp fetch first (properly handles User-Agent on Android)
+  try {
+    const result = await fetchPlaylistNative(url);
+    if (result.success) {
+      content = result.content;
+    }
+  } catch {
+    // Native fetch unavailable, fall through to JS fetch
   }
 
-  const content = result.content;
+  // Fallback: JS fetch
+  if (!content) {
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": PRYSM_USER_AGENT,
+        Accept: "*/*",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        "Could not fetch playlist. The server may be blocking requests or require specific app authentication.",
+      );
+    }
+
+    content = await response.text();
+  }
 
   if (
     !content ||

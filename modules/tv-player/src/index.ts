@@ -187,12 +187,20 @@ TvPlayerView.displayName = "TvPlayerView";
 export async function fetchPlaylistNative(
   url: string,
 ): Promise<{ success: boolean; error: string; content: string }> {
-  if (!TvPlayerModule) {
+  if (!TvPlayerModule || typeof TvPlayerModule.fetchPlaylist !== "function") {
     return {
       success: false,
       error: "Native module not available",
       content: "",
     };
   }
-  return TvPlayerModule.fetchPlaylist(url);
+  try {
+    return await TvPlayerModule.fetchPlaylist(url);
+  } catch (e: any) {
+    return {
+      success: false,
+      error: e?.message || "Native fetch failed",
+      content: "",
+    };
+  }
 }
