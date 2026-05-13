@@ -289,7 +289,6 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   const [showStopAudioModal, setShowStopAudioModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showQualityModal, setShowQualityModal] = useState(false);
-  const [showAspectModal, setShowAspectModal] = useState(false);
   const [showAudioModal, setShowAudioModal] = useState(false);
   const [showSubtitleModal, setShowSubtitleModal] = useState(false);
 
@@ -379,16 +378,9 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     anyModalOpenRef.current =
       showSettingsModal ||
       showQualityModal ||
-      showAspectModal ||
       showAudioModal ||
       showSubtitleModal;
-  }, [
-    showSettingsModal,
-    showQualityModal,
-    showAspectModal,
-    showAudioModal,
-    showSubtitleModal,
-  ]);
+  }, [showSettingsModal, showQualityModal, showAudioModal, showSubtitleModal]);
 
   // Start/reset the auto-hide timer for both TV and phone.
   const scheduleHide = useCallback(() => {
@@ -1340,62 +1332,8 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 ) : null}
               </View>
 
-              {/* Right tool buttons — YouTube-style order */}
+              {/* Right tool buttons */}
               <View style={st.bottomRight}>
-                {/* Subtitles (CC) */}
-                {subtitleTracks.length > 0 ? (
-                  <TVFocusablePressable
-                    onPress={() => setShowSubtitleModal(true)}
-                    baseStyle={[
-                      st.toolBtn,
-                      selectedSubtitleTrack !== null && st.toolBtnActive,
-                    ]}
-                    focusedStyle={st.toolBtnFocused}
-                    focusable={showControls}
-                    accessibilityLabel="Subtitles"
-                  >
-                    <Ionicons
-                      name="text"
-                      size={20}
-                      color={
-                        selectedSubtitleTrack !== null
-                          ? Colors.dark.primary
-                          : "#fff"
-                      }
-                    />
-                  </TVFocusablePressable>
-                ) : null}
-
-                {/* Audio */}
-                {audioTracks.length > 0 ? (
-                  <TVFocusablePressable
-                    onPress={() => setShowAudioModal(true)}
-                    baseStyle={st.toolBtn}
-                    focusedStyle={st.toolBtnFocused}
-                    focusable={showControls}
-                    accessibilityLabel="Audio track"
-                  >
-                    <Ionicons
-                      name="volume-medium-outline"
-                      size={20}
-                      color="#fff"
-                    />
-                  </TVFocusablePressable>
-                ) : null}
-
-                {/* Quality */}
-                {qualities.length > 0 ? (
-                  <TVFocusablePressable
-                    onPress={() => setShowQualityModal(true)}
-                    baseStyle={st.toolBtn}
-                    focusedStyle={st.toolBtnFocused}
-                    focusable={showControls}
-                    accessibilityLabel="Quality"
-                  >
-                    <Ionicons name="layers-outline" size={20} color="#fff" />
-                  </TVFocusablePressable>
-                ) : null}
-
                 {/* Settings */}
                 <TVFocusablePressable
                   onPress={() => setShowSettingsModal(true)}
@@ -1405,17 +1343,6 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                   accessibilityLabel="Settings"
                 >
                   <Ionicons name="settings-outline" size={20} color="#fff" />
-                </TVFocusablePressable>
-
-                {/* Aspect ratio */}
-                <TVFocusablePressable
-                  onPress={() => setShowAspectModal(true)}
-                  baseStyle={st.toolBtn}
-                  focusedStyle={st.toolBtnFocused}
-                  focusable={showControls}
-                  accessibilityLabel="Aspect ratio"
-                >
-                  <Ionicons name="scan-outline" size={20} color="#fff" />
                 </TVFocusablePressable>
 
                 {/* Background audio */}
@@ -1458,25 +1385,41 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                     <Ionicons name="browsers-outline" size={20} color="#fff" />
                   </TVFocusablePressable>
                 ) : null}
-
-                {/* Lock — mobile only */}
-                {!isTV ? (
-                  <TVFocusablePressable
-                    onPress={() => setIsLocked(true)}
-                    baseStyle={st.toolBtn}
-                    focusedStyle={st.toolBtnFocused}
-                    focusable={showControls}
-                    accessibilityLabel="Lock controls"
-                  >
-                    <Ionicons
-                      name="lock-closed-outline"
-                      size={20}
-                      color="#fff"
-                    />
-                  </TVFocusablePressable>
-                ) : null}
               </View>
             </View>
+          </View>
+
+          {/* Aspect ratio — floating button in bottom-right corner */}
+          <View
+            style={[
+              st.aspectBtnContainer,
+              {
+                bottom: insets.bottom + Spacing.md,
+                right: insets.right + Spacing.md,
+              },
+            ]}
+          >
+            <TVFocusablePressable
+              onPress={() => {
+                const currentIndex = CONTENT_FIT_OPTIONS.findIndex(
+                  (o) => o.value === contentFit,
+                );
+                const nextIndex =
+                  (currentIndex + 1) % CONTENT_FIT_OPTIONS.length;
+                const next = CONTENT_FIT_OPTIONS[nextIndex];
+                setContentFit(next.value);
+                TvPlayerCommands.setResizeMode(tvPlayerRef, next.value);
+              }}
+              baseStyle={st.aspectBtn}
+              focusedStyle={st.aspectBtnFocused}
+              focusable={showControls}
+              accessibilityLabel="Aspect ratio"
+            >
+              <Ionicons name="scan-outline" size={20} color="#fff" />
+              <ThemedText type="caption" style={st.aspectBtnText}>
+                {currentAspectLabel}
+              </ThemedText>
+            </TVFocusablePressable>
           </View>
         </Animated.View>
       ) : null}
@@ -1655,15 +1598,6 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 hidden: qualities.length === 0,
               },
               {
-                label: "Aspect ratio",
-                value: currentAspectLabel,
-                icon: "scan-outline" as const,
-                onPress: () => {
-                  setShowSettingsModal(false);
-                  setShowAspectModal(true);
-                },
-              },
-              {
                 label: "Audio track",
                 value: selectedAudioTrack
                   ? (audioTracks.find((t) => t.id === selectedAudioTrack)
@@ -1805,59 +1739,6 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
                 </TVFocusablePressable>
               ))}
             </ScrollView>
-          </View>
-        </Pressable>
-      </Modal>
-
-      {/* ── Aspect ratio modal ──────────────────────────────────────── */}
-      <Modal
-        visible={showAspectModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowAspectModal(false)}
-      >
-        <Pressable
-          style={st.modalScrim}
-          onPress={() => setShowAspectModal(false)}
-          focusable={!isTV}
-        >
-          <View style={st.modalSheet}>
-            <ThemedText type="h4" style={st.modalTitle}>
-              Aspect Ratio
-            </ThemedText>
-            {CONTENT_FIT_OPTIONS.map((opt, idx) => (
-              <TVFocusablePressable
-                key={opt.value}
-                onPress={() => {
-                  setContentFit(opt.value);
-                  TvPlayerCommands.setResizeMode(tvPlayerRef, opt.value);
-                  setShowAspectModal(false);
-                }}
-                baseStyle={[
-                  st.optionRow,
-                  contentFit === opt.value && st.optionRowActive,
-                ]}
-                focusedStyle={st.optionRowFocused}
-                hasTVPreferredFocus={isTV && contentFit === opt.value}
-              >
-                <Ionicons
-                  name={opt.icon as any}
-                  size={22}
-                  color={Colors.dark.textSecondary}
-                  style={{ marginRight: Spacing.md }}
-                />
-                <ThemedText type="body" style={{ color: "#fff", flex: 1 }}>
-                  {opt.label}
-                </ThemedText>
-                {contentFit === opt.value ? (
-                  <Ionicons
-                    name="checkmark"
-                    size={20}
-                    color={Colors.dark.primary}
-                  />
-                ) : null}
-              </TVFocusablePressable>
-            ))}
           </View>
         </Pressable>
       </Modal>
@@ -2357,6 +2238,31 @@ const st = StyleSheet.create({
   toolBtnFocused: {
     backgroundColor: "rgba(255,255,255,0.28)",
     transform: [{ scale: 1.12 }],
+  },
+
+  // Aspect ratio floating button
+  aspectBtnContainer: {
+    position: "absolute",
+  },
+  aspectBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 2,
+    borderColor: "transparent",
+    gap: Spacing.xs,
+  },
+  aspectBtnFocused: {
+    backgroundColor: "rgba(0,0,0,0.8)",
+    borderColor: Colors.dark.primary,
+  },
+  aspectBtnText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
   },
 
   // Recent channels panel
