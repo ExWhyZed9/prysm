@@ -29,6 +29,7 @@ import { usePlaylist } from "@/context/PlaylistContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { Toast } from "@/components/Toast";
 import {
   checkForUpdate,
   downloadApk,
@@ -185,6 +186,8 @@ export default function SettingsScreen() {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [installingApk, setInstallingApk] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showToast, setShowToast] = useState(false);
 
   const isTV = Platform.isTV;
   const useColumns = width > 700;
@@ -219,6 +222,8 @@ export default function SettingsScreen() {
   const handleRefreshPlaylist = async () => {
     if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await refreshPlaylist();
+    setToastMessage("Playlist refreshed successfully");
+    setShowToast(true);
   };
 
   const handleQualitySelect = (value: typeof settings.videoQuality) => {
@@ -463,15 +468,7 @@ export default function SettingsScreen() {
                 icon="refresh-circle"
                 title="Refresh Playlist Now"
                 subtitle={
-                  playlist?.url
-                    ? (() => {
-                        try {
-                          return `Re-fetch from ${new URL(playlist.url).hostname}`;
-                        } catch {
-                          return "Re-fetch from source";
-                        }
-                      })()
-                    : "No URL configured"
+                  playlist ? `Re-fetch ${playlist.name}` : "No playlist loaded"
                 }
                 onPress={handleRefreshPlaylist}
                 disabled={!playlist?.url || isLoadingPlaylist}
@@ -1302,6 +1299,12 @@ export default function SettingsScreen() {
           </View>
         </Pressable>
       </Modal>
+
+      <Toast
+        message={toastMessage || ""}
+        visible={showToast}
+        onHide={() => setShowToast(false)}
+      />
     </ThemedView>
   );
 }
