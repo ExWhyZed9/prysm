@@ -169,6 +169,7 @@ export interface AdvancedVideoPlayerProps {
   subtitle?: string;
   poster?: string;
   autoPlay?: boolean;
+  backgroundPlay?: boolean;
   drm?: DRMConfig;
   headers?: Record<string, string>;
   qualities?: VideoQuality[];
@@ -204,6 +205,7 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   subtitle,
   poster,
   autoPlay = true,
+  backgroundPlay = false,
   headers,
   drm,
   qualities: propQualities = [],
@@ -501,22 +503,11 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
     };
   }, []);
 
-  // Handle app state changes — background audio on TV only.
-  // Mobile PiP is triggered only by explicit user action (PiP button), not on app background.
+  // Handle app state changes — background audio is only enabled when
+  // the user explicitly toggles it or the backgroundPlay setting is on.
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (nextAppState === "background" || nextAppState === "inactive") {
-        if (isTV) {
-          // TV: auto-enable background audio when minimizing
-          if (isPlaying && !isBackgroundPlayingRef.current) {
-            TvPlayerCommands.enableBackgroundAudio(tvPlayerRef);
-            TvPlayerCommands.setMediaMetadata(tvPlayerRef, {
-              title: title || "",
-              artist: subtitle || "Live TV",
-              artworkUri: poster,
-            });
-          }
-        }
         // Mobile: do NOT auto-enter PiP — user must tap the PiP button explicitly
       } else if (nextAppState === "active") {
         // App came back to foreground
@@ -532,7 +523,19 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
       handleAppStateChange,
     );
     return () => subscription.remove();
-  }, [isPlaying, title, subtitle, poster]);
+  }, []);
+
+  // Enable background audio on mount if the setting is on (TV only).
+  useEffect(() => {
+    if (!isTV || !backgroundPlay || !isPlaying) return;
+    TvPlayerCommands.enableBackgroundAudio(tvPlayerRef);
+    TvPlayerCommands.setMediaMetadata(tvPlayerRef, {
+      title: title || "",
+      artist: subtitle || "Live TV",
+      artworkUri: poster,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Keep a ref to the current contentFit so the PiP listener (which is
   // registered once) always restores the correct mode on PiP exit.

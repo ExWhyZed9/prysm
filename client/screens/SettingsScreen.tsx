@@ -209,6 +209,11 @@ export default function SettingsScreen() {
     updateSettings({ autoPlay: value });
   };
 
+  const handleToggleBackgroundPlay = (value: boolean) => {
+    if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    updateSettings({ backgroundPlay: value });
+  };
+
   const handleToggleCategories = (value: boolean) => {
     if (!isTV) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     updateSettings({ showCategoryFilter: value });
@@ -494,6 +499,14 @@ export default function SettingsScreen() {
                 isToggle
                 toggleValue={settings.autoPlay}
                 onToggle={handleToggleAutoPlay}
+              />
+              <SettingsRow
+                icon="musical-notes"
+                title="Background Play"
+                subtitle="Continue audio when app is minimized"
+                isToggle
+                toggleValue={settings.backgroundPlay}
+                onToggle={handleToggleBackgroundPlay}
               />
               <SettingsRow
                 icon="options"

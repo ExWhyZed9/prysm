@@ -85,6 +85,7 @@ export const USER_AGENT_STRINGS: Record<UserAgent, string> = {
 
 export interface AppSettings {
   autoPlay: boolean;
+  backgroundPlay: boolean;
   videoQuality: "auto" | "high" | "medium" | "low";
   showCategoryFilter: boolean;
   autoRefreshInterval: AutoRefreshInterval;
@@ -95,6 +96,7 @@ export interface AppSettings {
 
 const DEFAULT_SETTINGS: AppSettings = {
   autoPlay: true,
+  backgroundPlay: false,
   videoQuality: "auto",
   showCategoryFilter: true,
   autoRefreshInterval: "off",

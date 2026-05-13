@@ -223,6 +223,7 @@ export default function PlayerScreen() {
         subtitle={channel.group}
         poster={channel.logo}
         autoPlay={settings.autoPlay}
+        backgroundPlay={settings.backgroundPlay}
         drm={getDRMConfig()}
         headers={getStreamHeaders()}
         qualities={DEFAULT_QUALITIES}
