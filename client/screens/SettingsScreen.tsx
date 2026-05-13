@@ -35,6 +35,7 @@ import {
   getDownloadedApkPath,
   UpdateInfo,
 } from "@/utils/updateChecker";
+import * as FileSystemLegacy from "expo-file-system/legacy";
 
 type SettingsNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -347,10 +348,11 @@ export default function SettingsScreen() {
       }
       setDownloadingApk(false);
       setInstallingApk(true);
+      const contentUri = await FileSystemLegacy.getContentUriAsync(apkPath);
       await IntentLauncher.startActivityAsync(
         "android.intent.action.INSTALL_PACKAGE",
         {
-          data: apkPath,
+          data: contentUri,
           flags: 1,
         },
       );
