@@ -830,12 +830,6 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
   const progress = durationMs > 0 ? positionMs / durationMs : 0;
   const displayedRecent = recentChannels.slice(0, 5);
 
-  const currentAspectLabel = useMemo(
-    () =>
-      CONTENT_FIT_OPTIONS.find((o) => o.value === contentFit)?.label ?? "Fit",
-    [contentFit],
-  );
-
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <GestureHandlerRootView style={[st.root, { width, height }]}>
@@ -1334,6 +1328,26 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
 
               {/* Right tool buttons */}
               <View style={st.bottomRight}>
+                {/* Aspect ratio */}
+                <TVFocusablePressable
+                  onPress={() => {
+                    const currentIndex = CONTENT_FIT_OPTIONS.findIndex(
+                      (o) => o.value === contentFit,
+                    );
+                    const nextIndex =
+                      (currentIndex + 1) % CONTENT_FIT_OPTIONS.length;
+                    const next = CONTENT_FIT_OPTIONS[nextIndex];
+                    setContentFit(next.value);
+                    TvPlayerCommands.setResizeMode(tvPlayerRef, next.value);
+                  }}
+                  baseStyle={st.toolBtn}
+                  focusedStyle={st.toolBtnFocused}
+                  focusable={showControls}
+                  accessibilityLabel="Aspect ratio"
+                >
+                  <Ionicons name="scan-outline" size={20} color="#fff" />
+                </TVFocusablePressable>
+
                 {/* Settings */}
                 <TVFocusablePressable
                   onPress={() => setShowSettingsModal(true)}
@@ -1389,38 +1403,6 @@ export const AdvancedVideoPlayer = React.memo(function AdvancedVideoPlayer({
             </View>
           </View>
 
-          {/* Aspect ratio — floating button in bottom-right corner */}
-          <View
-            style={[
-              st.aspectBtnContainer,
-              {
-                bottom: insets.bottom + Spacing.md,
-                right: insets.right + Spacing.md,
-              },
-            ]}
-          >
-            <TVFocusablePressable
-              onPress={() => {
-                const currentIndex = CONTENT_FIT_OPTIONS.findIndex(
-                  (o) => o.value === contentFit,
-                );
-                const nextIndex =
-                  (currentIndex + 1) % CONTENT_FIT_OPTIONS.length;
-                const next = CONTENT_FIT_OPTIONS[nextIndex];
-                setContentFit(next.value);
-                TvPlayerCommands.setResizeMode(tvPlayerRef, next.value);
-              }}
-              baseStyle={st.aspectBtn}
-              focusedStyle={st.aspectBtnFocused}
-              focusable={showControls}
-              accessibilityLabel="Aspect ratio"
-            >
-              <Ionicons name="scan-outline" size={20} color="#fff" />
-              <ThemedText type="caption" style={st.aspectBtnText}>
-                {currentAspectLabel}
-              </ThemedText>
-            </TVFocusablePressable>
-          </View>
         </Animated.View>
       ) : null}
 
@@ -2238,31 +2220,6 @@ const st = StyleSheet.create({
   toolBtnFocused: {
     backgroundColor: "rgba(255,255,255,0.28)",
     transform: [{ scale: 1.12 }],
-  },
-
-  // Aspect ratio floating button
-  aspectBtnContainer: {
-    position: "absolute",
-  },
-  aspectBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.6)",
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
-    borderRadius: BorderRadius.sm,
-    borderWidth: 2,
-    borderColor: "transparent",
-    gap: Spacing.xs,
-  },
-  aspectBtnFocused: {
-    backgroundColor: "rgba(0,0,0,0.8)",
-    borderColor: Colors.dark.primary,
-  },
-  aspectBtnText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "600",
   },
 
   // Recent channels panel
