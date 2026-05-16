@@ -18,6 +18,7 @@ dist/
 android/
 ios/
 !modules/**/android/
+modules/**/android/.gradle/
 
 # =========================
 # EAS / Signing Credentials
